@@ -1,5 +1,5 @@
 ~ this is a comment
-_
+
 class main is
   x: int        ~ x coord
   name: string  ~ identifier
@@ -12,3 +12,8 @@ class main is
 % ~ the % is a bad token
 end "unterminated
 "hey\q"
+~ invalid octal test
+"hey,\01sue!\""
+"hey,\1sue!\""
+~ valid octal test
+"hey,\111sue!\""

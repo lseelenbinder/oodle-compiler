@@ -8,30 +8,28 @@ import Data.Char
 -- The lexer takes a string and parses it according to the Oodle tokens.
 lexer :: String -> [TokenPosition]
 lexer cs =
-  lexer' cs 1 1
+  filter (\token -> getToken token /= NilToken && getToken token /= NilNewlineToken) (lexer' cs 1 1)
 
+-- Helper for lexer. Manages line and coloumns and creating TokenPositions
 lexer' :: String -> Int -> Int -> [TokenPosition]
 lexer' [] _ _ = []
 lexer' cs' line col =
   let
+    -- This isn't the most efficient means, but it will do for now since the
+    -- files aren't too big.
     new_col = col + ((length cs') - (length rest))
   in
-    if token == NilToken
-    then
-      lexer' rest line new_col
-    else
-      if token == NilNewlineToken
+    TokenPosition token line col :
+      (if token == TokenNewline || token == NilNewlineToken
       then
         lexer' rest (line + 1) 1
       else
-        TokenPosition token line col : (if token == TokenNewline then
-          lexer' rest (line + 1) 1
-          else
-          lexer' rest line new_col
-          )
+        lexer' rest line new_col
+      )
   where (token, rest) = lexSymbol cs'
 
--- Takes a string and returns the next token and the remaining text to parse
+-- lex a single symbol (and passes sequences to additional functions),
+-- returns the correct token and the remaining text to lex
 lexSymbol :: String -> (Token, String)
 lexSymbol ('~':cs)      = lexComment cs
 lexSymbol ('_':'\n':cs) = (NilNewlineToken, cs)
@@ -64,6 +62,7 @@ lexId cs =
     (lexId' identifier, rest)
   where (identifier, rest) = span (\x -> isAlphaNum x || x == '_') cs
 
+-- Helper for lexId
 lexId' :: String -> Token
 -- Keywords
 lexId' "and"      = TokenAnd
@@ -125,17 +124,19 @@ lexString cs =
       (TokenUnterminatedString actual,
         (if last str == '\xBFD' then '\n' : rest else rest))
     else
-      if last str == '\xBED'
+      (if last str == '\xBED'
       then
-        (TokenInvalidString actual, rest)
+        TokenInvalidString actual
       else
-        (TokenStringLiteral actual, rest)
+        TokenStringLiteral actual, rest)
   where str = scanUntilDouble cs
 
 -------------------
 -- Helper Methods--
 -------------------
 
+-- Scans and validates a string until a double quote is found.
+-- Also validates escape sequences, reporting any invalid sequences.
 scanUntilDouble :: String -> String
 -- \xBAD denotes an unterminated string
 scanUntilDouble [] = "\xBAD"

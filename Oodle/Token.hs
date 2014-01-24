@@ -59,6 +59,7 @@ data Token
       | TokenInvalid Char
       | TokenUnterminatedString String
       | TokenInvalidString String
+      -- Placeholder tokens for the lexer
       | NilToken
       | NilNewlineToken
   deriving (Show, Eq)
