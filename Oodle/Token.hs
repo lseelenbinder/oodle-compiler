@@ -1,9 +1,20 @@
-module Oodle.Token ( Token(..) ) where
+module Oodle.Token where
 
+-- TokenPosition holds the line and column # of a found token
+data TokenPosition = TokenPosition Token Int Int deriving (Show)
+getToken :: TokenPosition -> Token
+getToken (TokenPosition t _ _) = t
+getLine :: TokenPosition -> Int
+getLine (TokenPosition _ l _) = l
+getCol :: TokenPosition -> Int
+getCol (TokenPosition _ _ c) = c
+printToken :: TokenPosition -> String
+printToken (TokenPosition t line col) = (show line) ++ "," ++ (show col) ++ ":" ++ (show t)
+
+-- Token stores the varis
 data Token
       = TokenIntLiteral Int
       | TokenNewline
-      | TokenComment
       | TokenStringLiteral String
       | TokenIdentifier String
       | TokenBoolean
@@ -47,6 +58,13 @@ data Token
       | TokenPeriod
       | TokenInvalid Char
       | TokenUnterminatedString String
-      | TokenInvalidEscape Char
-  deriving (Show)
+      | TokenInvalidString String
+      | NilToken
+      | NilNewlineToken
+  deriving (Show, Eq)
 
+isErrorToken :: Token -> Bool
+isErrorToken (TokenInvalid _) = True
+isErrorToken (TokenUnterminatedString _) = True
+isErrorToken (TokenInvalidString _) = True
+isErrorToken _ = False
