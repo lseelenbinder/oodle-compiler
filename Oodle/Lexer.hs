@@ -1,3 +1,6 @@
+-- Filename: Oodle/Lexer.hs
+-- Contents: All the code for the Oodle lexer.
+
 module Oodle.Lexer (
   lexer
   ) where
@@ -19,7 +22,7 @@ lexer' cs' file line col =
   let
     -- This isn't the most efficient means, but it will do for now since the
     -- files aren't too big.
-    new_col = col + ((length cs') - (length rest))
+    new_col = col + (length cs' - length rest)
   in
     TokenPosition token file line col :
       (if token == TokenNewline || token == NilNewlineToken
@@ -30,7 +33,7 @@ lexer' cs' file line col =
       )
   where (token, rest) = lexSymbol cs'
 
--- lex a single symbol (and passes sequences to additional functions),
+-- lexes a single symbol (and passes sequences to additional functions),
 -- returns the correct token and the remaining text to lex
 lexSymbol :: String -> (Token, String)
 lexSymbol ('~':cs)      = lexComment cs
@@ -91,7 +94,6 @@ lexId' "while"    = TokenWhile
 -- Identifiers
 lexId' (identifier) = TokenIdentifier identifier
 
-
 -- lex number literals
 lexNum :: String -> (Token, String)
 lexNum cs = (TokenIntLiteral (read num), rest)
@@ -124,13 +126,14 @@ lexString cs =
     if last str == '\xBAD' || last str == '\xBFD'
     then
       (TokenUnterminatedString actual,
-        (if last str == '\xBFD' then '\n' : rest else rest))
+        if last str == '\xBFD' then '\n' : rest else rest)
     else
       (if last str == '\xBED'
       then
         TokenInvalidString actual
       else
-        TokenStringLiteral actual, rest)
+        TokenStringLiteral actual,
+      rest)
   where str = scanUntilDouble cs
 
 -------------------
@@ -144,10 +147,10 @@ scanUntilDouble :: String -> String
 scanUntilDouble [] = "\xBAD"
 -- \xBAD denotes an unterminated string due to a newline
 scanUntilDouble('\n':_) = "\xBFD"
-scanUntilDouble('"':_) = ['"'] -- I'm done parsing the string.
+scanUntilDouble('"':_) = "\"" -- I'm done parsing the string.
 -- TODO: only accept three character octal sequences
 scanUntilDouble ('\\':cs) =
-  if (length octal) > 0
+  if not (null octal)
   then
     if (length octal) /= 3
     then
@@ -155,10 +158,10 @@ scanUntilDouble ('\\':cs) =
     else
       '\\' : octal ++ (scanUntilDouble $ drop 3 cs)
   else
-    if ((head cs) `elem` ['t', 'n', 'f', 'r', '"', '\\'])
+    if (head cs) `elem` ['t', 'n', 'f', 'r', '"', '\\']
     then
-      '\\' : (head cs) : scanUntilDouble (tail cs)
+      '\\' : head cs : scanUntilDouble (tail cs)
     else
-      concat ["\\", (head cs) : [], scanUntilDouble (tail cs), "\xBED"]
-  where (octal, rest) = span isOctDigit cs
+      concat ["\\", [head cs], scanUntilDouble (tail cs), "\xBED"]
+  where (octal, _) = span isOctDigit cs
 scanUntilDouble(c:cs) = c:scanUntilDouble cs

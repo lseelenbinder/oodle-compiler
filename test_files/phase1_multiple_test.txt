@@ -1,6 +1,7 @@
 Welcome to Luke Seelenbinder's Oodle Compiler
-Parsing Error: test_files/phase1_test.ood:12,1:TokenInvalid '%'
-Parsing Error: test_files/phase1_test.ood:13,5:TokenUnterminatedString "unterminated"
-Parsing Error: test_files/phase1_test.ood:14,1:TokenInvalidString "hey\\q\""
-Parsing Error: test_files/phase1_test.ood:15,1:TokenInvalidString "hey,\\01sue!\\\"\""
+
+Lexical Error: test_files/phase1_test.ood:12,1:TokenInvalid '%'
+Lexical Error: test_files/phase1_test.ood:13,5:TokenUnterminatedString "unterminated"
+Lexical Error: test_files/phase1_test.ood:14,1:TokenInvalidString "hey\\q\""
+Lexical Error: test_files/phase1_test.ood:15,1:TokenInvalidString "hey,\\01sue!\\\"\""
 Done

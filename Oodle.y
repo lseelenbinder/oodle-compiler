@@ -1,3 +1,7 @@
+-- Filename: oodle.y
+-- Contents: The directies for the Happy compiler-compiler.
+-- Notes: This code probably does not work for Phase 1, as it is not needed.
+
 {
 import Oodle.Token
 

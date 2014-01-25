@@ -1,3 +1,7 @@
+-- Filename: Main.hs
+-- Contents: The framework for running the compiler. Parses options and runs
+-- the compiler sequence.
+
 module Main (main) where
 
 import Oodle.Lexer
@@ -7,6 +11,8 @@ import System.IO
 import System.Environment
 import System.Exit
 
+-- The following functions are related to options handling and mostly copied from
+-- http://hackage.haskell.org/package/base-4.6.0.1/docs/System-Console-GetOpt.html
 data Options = Options  { optVerbose :: Bool }
 
 startOptions :: Options
@@ -28,6 +34,9 @@ options =
         "Show help"
     ]
 
+-- End Options
+
+-- Prints a token stream or parser errors, depending on the verbose flag.
 printTokenStream :: Bool -> [TokenPosition] -> IO ()
 printTokenStream _ [] = do putStr ""
 printTokenStream verbose (t:ts) =
@@ -38,13 +47,13 @@ printTokenStream verbose (t:ts) =
     else
       if isErrorToken (getToken t)
       then
-        putStrLn $ "Parsing Error: " ++ token_str
+        putStrLn $ "Lexical Error: " ++ token_str
       else
         putStr ""
     printTokenStream verbose ts
     where (token_str) = printToken t
 
-
+-- Builds the full token stream from a set of source files.
 buildTokenStream :: ([FilePath], Bool) -> IO ([TokenPosition])
 buildTokenStream ([], _) = return ([])
 buildTokenStream (fileNames, verbose) = do
@@ -54,6 +63,7 @@ buildTokenStream (fileNames, verbose) = do
   -- Concatenate the TokenStreams
   return $ concat [tokenStream, tokenStream']
 
+-- Builds a single token stream from a source files.
 makeTokenStream :: FilePath -> Bool -> IO ([TokenPosition])
 makeTokenStream file verbose =
   do source <- readFile file
@@ -61,10 +71,10 @@ makeTokenStream file verbose =
      _ <- printTokenStream verbose tokenStream
      return (tokenStream)
 
-
+-- Main function
 main :: IO ()
 main = do
-    putStrLn "Welcome to Luke Seelenbinder's Oodle Compiler"
+    putStrLn "Welcome to Luke Seelenbinder's Oodle Compiler\n"
 
     -- Handle Options
     args <- getArgs
