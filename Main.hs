@@ -34,14 +34,15 @@ printTokenStream verbose (t:ts) =
   do
     if verbose
     then
-      putStrLn $ printToken t
+      putStrLn token_str
     else
       if isErrorToken (getToken t)
       then
-        putStrLn $ "Parsing Error: " ++ (show (Oodle.Token.getLine t)) ++ ": " ++ (show (getToken t))
+        putStrLn $ "Parsing Error: " ++ token_str
       else
         putStr ""
     printTokenStream verbose ts
+    where (token_str) = printToken t
 
 
 buildTokenStream :: ([FilePath], Bool) -> IO ([TokenPosition])
@@ -85,6 +86,7 @@ main = do
         -- Parse the TokenStream
         if verbose
         then
-          putStrLn $ (show (length tokenStream)) ++ " Tokens found across " ++ (show (length nonOptions)) ++ " files."
+          putStrLn $ (show (length tokenStream)) ++ " Tokens found across " ++
+            (show (length nonOptions)) ++ " file(s)."
         else
           putStrLn "Done"
