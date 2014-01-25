@@ -1,0 +1,48 @@
+Welcome to Luke Seelenbinder's Oodle Compiler
+test_files/phase1_test.ood:1,20:TokenNewline
+test_files/phase1_test.ood:2,1:TokenNewline
+test_files/phase1_test.ood:3,1:TokenClass
+test_files/phase1_test.ood:3,7:TokenIdentifier "main"
+test_files/phase1_test.ood:3,12:TokenIs
+test_files/phase1_test.ood:3,14:TokenNewline
+test_files/phase1_test.ood:4,3:TokenIdentifier "x"
+test_files/phase1_test.ood:4,4:TokenColon
+test_files/phase1_test.ood:4,6:TokenInt
+test_files/phase1_test.ood:4,26:TokenNewline
+test_files/phase1_test.ood:5,3:TokenIdentifier "name"
+test_files/phase1_test.ood:5,7:TokenColon
+test_files/phase1_test.ood:5,9:TokenString
+test_files/phase1_test.ood:5,29:TokenNewline
+test_files/phase1_test.ood:6,1:TokenNewline
+test_files/phase1_test.ood:7,3:TokenIdentifier "start"
+test_files/phase1_test.ood:7,8:TokenOP
+test_files/phase1_test.ood:7,9:TokenCP
+test_files/phase1_test.ood:7,11:TokenIs
+test_files/phase1_test.ood:7,13:TokenNewline
+test_files/phase1_test.ood:8,5:TokenIdentifier "i"
+test_files/phase1_test.ood:8,6:TokenColon
+test_files/phase1_test.ood:8,8:TokenInt
+test_files/phase1_test.ood:8,11:TokenNewline
+test_files/phase1_test.ood:9,5:TokenBegin
+test_files/phase1_test.ood:9,10:TokenNewline
+test_files/phase1_test.ood:10,7:TokenIdentifier "print"
+test_files/phase1_test.ood:10,12:TokenOP
+test_files/phase1_test.ood:10,13:TokenStringLiteral "hey,\\\"sue!\\\""
+test_files/phase1_test.ood:10,28:TokenStringConcat
+test_files/phase1_test.ood:10,30:TokenIdentifier "name"
+test_files/phase1_test.ood:10,34:TokenCP
+test_files/phase1_test.ood:10,35:TokenNewline
+test_files/phase1_test.ood:11,5:TokenIdentifier "end"
+test_files/phase1_test.ood:11,8:TokenNewline
+test_files/phase1_test.ood:12,1:TokenInvalid '%'
+test_files/phase1_test.ood:12,25:TokenNewline
+test_files/phase1_test.ood:13,1:TokenIdentifier "end"
+test_files/phase1_test.ood:13,5:TokenUnterminatedString "unterminated"
+test_files/phase1_test.ood:13,18:TokenNewline
+test_files/phase1_test.ood:14,1:TokenInvalidString "hey\\q\""
+test_files/phase1_test.ood:14,29:TokenNewline
+test_files/phase1_test.ood:15,1:TokenInvalidString "hey,\\01sue!\\\"\""
+test_files/phase1_test.ood:15,35:TokenNewline
+test_files/phase1_test.ood:16,1:TokenStringLiteral "hey,\\111sue!\\\""
+test_files/phase1_test.ood:16,17:TokenNewline
+46 Tokens found across 1 file(s).

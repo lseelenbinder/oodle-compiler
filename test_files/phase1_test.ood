@@ -14,6 +14,5 @@ end "unterminated
 "hey\q"
 ~ invalid octal test
 "hey,\01sue!\""
-"hey,\1sue!\""
 ~ valid octal test
 "hey,\111sue!\""

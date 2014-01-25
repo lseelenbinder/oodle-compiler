@@ -1,0 +1,22 @@
+~ test1.ood
+
+class main is
+
+  r1: string := ""
+  y := 3
+
+  start() is
+  begin
+    loop while s = ""
+      out.write("enter your name:")
+      s := in.readline()
+      if not s = "" then
+        out.write(s)
+      end if
+      y := y + 1 * 2 / _
+          (56 + 2) - 3
+      out.write(s & "this is a test." & "there we go")
+    end loop
+  end start
+
+end main
