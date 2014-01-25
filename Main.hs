@@ -38,23 +38,30 @@ printTokenStream verbose (t:ts) =
     else
       if isErrorToken (getToken t)
       then
-        putStrLn $ "Parsing Error Line " ++ (show (Oodle.Token.getLine t)) ++ ": " ++ (show (getToken t))
+        putStrLn $ "Parsing Error: " ++ (show (Oodle.Token.getLine t)) ++ ": " ++ (show (getToken t))
       else
         putStr ""
     printTokenStream verbose ts
 
 
-printAndNext :: ([FilePath], Bool) -> IO ()
-printAndNext ([], _) = do
-  putStrLn "Done"
-printAndNext (fileNames, verbose) = do
-  let (file) = (head fileNames)
-  putStrLn $ take 80 (cycle "*")
-  putStrLn $ "Parsing " ++ file
-  putStrLn $ take 80 (cycle "*")
-  readFile (file) >>= (printTokenStream verbose) . Oodle.Lexer.lexer
-  printAndNext ((tail fileNames), verbose)
+buildTokenStream :: ([FilePath], Bool) -> IO ([TokenPosition])
+buildTokenStream ([], _) = return ([])
+buildTokenStream (fileNames, verbose) = do
+  -- IO recursion
+  tokenStream  <- makeTokenStream (head fileNames) verbose
+  tokenStream' <- buildTokenStream ((tail fileNames), verbose)
+  -- Concatenate the TokenStreams
+  return $ concat [tokenStream, tokenStream']
 
+makeTokenStream :: FilePath -> Bool -> IO ([TokenPosition])
+makeTokenStream file verbose =
+  do source <- readFile file
+     let tokenStream = Oodle.Lexer.lexer source file
+     _ <- printTokenStream verbose tokenStream
+     return (tokenStream)
+
+
+main :: IO ()
 main = do
     putStrLn "Welcome to Luke Seelenbinder's Oodle Compiler"
 
@@ -73,4 +80,11 @@ main = do
         exitWith $ ExitFailure 1
     else
       do
-        printAndNext (nonOptions, verbose)
+        -- Lex the input files
+        tokenStream <- buildTokenStream (nonOptions, verbose)
+        -- Parse the TokenStream
+        if verbose
+        then
+          putStrLn $ (show (length tokenStream)) ++ " Tokens found across " ++ (show (length nonOptions)) ++ " files."
+        else
+          putStrLn "Done"

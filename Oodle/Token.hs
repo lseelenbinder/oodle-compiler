@@ -1,15 +1,17 @@
 module Oodle.Token where
 
--- TokenPosition holds the line and column # of a found token
-data TokenPosition = TokenPosition Token Int Int deriving (Show)
+-- TokenPosition holds the file, line, and column # of a found token
+data TokenPosition = TokenPosition Token FilePath Int Int deriving (Show)
 getToken :: TokenPosition -> Token
-getToken (TokenPosition t _ _) = t
+getToken (TokenPosition t _ _ _) = t
+getFilePath :: TokenPosition -> FilePath
+getFilePath (TokenPosition _ file _ _) = file
 getLine :: TokenPosition -> Int
-getLine (TokenPosition _ l _) = l
+getLine (TokenPosition _ _ l _) = l
 getCol :: TokenPosition -> Int
-getCol (TokenPosition _ _ c) = c
+getCol (TokenPosition _ _ _ c) = c
 printToken :: TokenPosition -> String
-printToken (TokenPosition t line col) = (show line) ++ "," ++ (show col) ++ ":" ++ (show t)
+printToken (TokenPosition t file line col) = file ++ ":" ++ show line ++ "," ++ show col ++ ":" ++ show t
 
 -- Token stores the varis
 data Token

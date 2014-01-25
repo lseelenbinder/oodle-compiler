@@ -6,25 +6,27 @@ import Oodle.Token
 import Data.Char
 
 -- The lexer takes a string and parses it according to the Oodle tokens.
-lexer :: String -> [TokenPosition]
-lexer cs =
-  filter (\token -> getToken token /= NilToken && getToken token /= NilNewlineToken) (lexer' cs 1 1)
+lexer :: String -> FilePath -> [TokenPosition]
+lexer cs file =
+  filter
+    (\token -> getToken token /= NilToken && getToken token /= NilNewlineToken)
+    (lexer' cs file 1 1)
 
 -- Helper for lexer. Manages line and coloumns and creating TokenPositions
-lexer' :: String -> Int -> Int -> [TokenPosition]
-lexer' [] _ _ = []
-lexer' cs' line col =
+lexer' :: String -> FilePath -> Int -> Int -> [TokenPosition]
+lexer' [] _ _ _ = []
+lexer' cs' file line col =
   let
     -- This isn't the most efficient means, but it will do for now since the
     -- files aren't too big.
     new_col = col + ((length cs') - (length rest))
   in
-    TokenPosition token line col :
+    TokenPosition token file line col :
       (if token == TokenNewline || token == NilNewlineToken
       then
-        lexer' rest (line + 1) 1
+        lexer' rest file (line + 1) 1
       else
-        lexer' rest line new_col
+        lexer' rest file line new_col
       )
   where (token, rest) = lexSymbol cs'
 
