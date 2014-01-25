@@ -148,7 +148,6 @@ scanUntilDouble [] = "\xBAD"
 -- \xBAD denotes an unterminated string due to a newline
 scanUntilDouble('\n':_) = "\xBFD"
 scanUntilDouble('"':_) = "\"" -- I'm done parsing the string.
--- TODO: only accept three character octal sequences
 scanUntilDouble ('\\':cs) =
   if not (null octal)
   then
