@@ -75,6 +75,7 @@ lexId' "boolean"  = TokenBoolean
 lexId' "begin"    = TokenBegin
 lexId' "class"    = TokenClass
 lexId' "else"     = TokenElse
+lexId' "end"      = TokenEnd
 lexId' "false"    = TokenFalse
 lexId' "from"     = TokenFrom
 lexId' "if"       = TokenIf
