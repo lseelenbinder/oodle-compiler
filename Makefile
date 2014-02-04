@@ -1,9 +1,9 @@
 build_and_compile: build_happy compile 
 
 build_happy:
-	~/.cabal/bin/happy -o Oodle/Parser.hs Oodle.y
+	~/.cabal/bin/happy -gac -o Oodle/Parser.hs --magic=oodle Oodle.y
 compile:
-	ghc Main.hs -o oodle
+	ghc -O Main.hs -o oodle
 
 test:
 	@echo "Testing Oodle Compiler...\n(an empty diff is a passing test)\n\n"
