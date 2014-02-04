@@ -4,6 +4,7 @@
 
 module Main (main) where
 
+import Oodle.Parser
 import Oodle.Lexer
 import Oodle.Token
 import System.Console.GetOpt
@@ -94,9 +95,12 @@ main = do
         -- Lex the input files
         tokenStream <- buildTokenStream (nonOptions, verbose)
         -- Parse the TokenStream
+        r <- print $ Oodle.Parser.parser (map getToken tokenStream)
+
         if verbose
         then
           putStrLn $ (show (length tokenStream)) ++ " Tokens found across " ++
             (show (length nonOptions)) ++ " file(s)."
         else
           putStrLn "Done"
+

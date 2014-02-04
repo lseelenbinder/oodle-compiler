@@ -12,6 +12,7 @@ class main is
       s := in.readline()
       if not s = "" then
         out.write(s)
+        out[1][2].write(s)
       end if
       y := y + 1 * 2 / _
           (56 + 2) - 3

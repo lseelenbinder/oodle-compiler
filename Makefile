@@ -1,7 +1,7 @@
-build_and_compile: compile build_happy
+build_and_compile: build_happy compile 
 
 build_happy:
-	~/.cabal/bin/happy Oodle.y
+	~/.cabal/bin/happy -o Oodle/Parser.hs Oodle.y
 compile:
 	ghc Main.hs -o oodle
 
