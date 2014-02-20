@@ -78,17 +78,18 @@ import Oodle.Token
 
 %%
 
-Start     : cr ClassList                        { Start $2 }
+Start         : cr ClassList                    { Start $2 }
 
 -- Classes
 ClassList     ::                                { [Class] }
 ClassList     : Class                           { [$1] }
-              | Class ClassList                 { $1 : $2 }
+              | Class cr                        { [$1] }
+              | Class cr ClassList              { $1 : $3 }
 
 Class         : class id InheritsExpr is cr
                 VarList
                 MethodList
-                id cr                           { Class (Id $2) $3 $6 $7 (Id $8) }
+                id                              { Class (Id $2) $3 $6 $7 (Id $8) }
 
 InheritsExpr  ::                                { Id }
 InheritsExpr  : inherits from id                { Id $> }
