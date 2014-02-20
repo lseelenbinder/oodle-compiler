@@ -14,10 +14,10 @@ import System.Exit
 
 -- The following functions are related to options handling and mostly copied from
 -- http://hackage.haskell.org/package/base-4.6.0.1/docs/System-Console-GetOpt.html
-data Options = Options  { optVerbose :: Bool }
+data Options = Options  { optVerbose :: Bool, optLexer :: Bool }
 
 startOptions :: Options
-startOptions = Options  { optVerbose = False }
+startOptions = Options  { optVerbose = False, optLexer = False }
 
 options :: [ OptDescr (Options -> IO Options) ]
 options =
@@ -30,61 +30,78 @@ options =
             (\_ -> do
               prg <- getProgName
               hPutStrLn stderr (usageInfo prg options)
-              exitWith ExitSuccess)
+              exitSuccess)
               )
         "Show help"
+    , Option "l" ["lexer-only"]
+        (NoArg
+            (\opt -> return opt { optLexer = True }))
+        "Only lex the files"
     ]
 
 -- End Options
 
 -- Prints a token stream or parser errors, depending on the verbose flag.
-printTokenStream :: Bool -> [TokenPosition] -> IO ()
-printTokenStream _ [] = do putStr ""
+printTokenStream :: Bool -> [Token] -> IO ()
+printTokenStream _ [] = putStr ""
 printTokenStream verbose (t:ts) =
   do
     if verbose
     then
       putStrLn token_str
     else
-      if isErrorToken (getToken t)
+      if isErrorToken t
       then
-        putStrLn $ "Lexical Error: " ++ token_str
+        putStrLn $ token_str
       else
         putStr ""
     printTokenStream verbose ts
     where (token_str) = printToken t
 
 -- Builds the full token stream from a set of source files.
-buildTokenStream :: ([FilePath], Bool) -> IO ([TokenPosition])
-buildTokenStream ([], _) = return ([])
+buildTokenStream :: ([FilePath], Bool) -> IO [Token]
+buildTokenStream ([], _) = return []
 buildTokenStream (fileNames, verbose) = do
   -- IO recursion
   tokenStream  <- makeTokenStream (head fileNames) verbose
-  tokenStream' <- buildTokenStream ((tail fileNames), verbose)
+  tokenStream' <- buildTokenStream (tail fileNames, verbose)
   -- Concatenate the TokenStreams
-  return $ concat [tokenStream, tokenStream']
+  return $ tokenStream ++ tokenStream'
 
 -- Builds a single token stream from a source files.
-makeTokenStream :: FilePath -> Bool -> IO ([TokenPosition])
+makeTokenStream :: FilePath -> Bool -> IO [Token]
 makeTokenStream file verbose =
   do source <- readFile file
      let tokenStream = Oodle.Lexer.lexer source file
      _ <- printTokenStream verbose tokenStream
-     return (tokenStream)
+     return tokenStream
+
+-- Will eventually print a "pretty" parse tree as well
+printParserOutput :: E a -> IO ()
+printParserOutput (Ok _) = putStrLn "Parse OK"
+printParserOutput (Failed a) = putStrLn a
+
+-- Checks if the Parse is successful
+verifyParse :: E a -> Bool
+verifyParse (Ok _) = True
+verifyParse (Failed _) = False
+
+
+-- Counts Lexical Error Tokens
+countErrorTokens :: [Token] -> Int
+countErrorTokens tks = foldr (\x y -> if isErrorToken x then y + 1 else y) 0 tks
 
 -- Main function
 main :: IO ()
 main = do
-    putStrLn "Welcome to Luke Seelenbinder's Oodle Compiler\n"
-
     -- Handle Options
     args <- getArgs
     prg <- getProgName
     let (actions, nonOptions, _) = getOpt RequireOrder options args
     opts <- foldl (>>=) (return startOptions) actions
-    let Options { optVerbose = verbose } = opts
+    let Options { optVerbose = verbose, optLexer = _ } = opts
 
-    if not $ (length nonOptions) >= 1
+    if length nonOptions < 1
     then
       do
         hPutStrLn stderr "FATAL ERROR: no input file(s)"
@@ -94,13 +111,31 @@ main = do
       do
         -- Lex the input files
         tokenStream <- buildTokenStream (nonOptions, verbose)
+        let errorCount = countErrorTokens tokenStream
         -- Parse the TokenStream
-        r <- print $ Oodle.Parser.parser (map getToken tokenStream)
+        let parseTree = Oodle.Parser.parser tokenStream
+
+        if not $ verifyParse parseTree
+        then
+          printParserOutput parseTree
+        else
+          putStr ""
+
+        if errorCount > 0
+        then
+          do
+            putStrLn $ show ((+) (if verifyParse parseTree then 0 else 1) errorCount) ++ " errors found"
+            exitWith $ ExitFailure 1
+        else
+          putStr ""
 
         if verbose
         then
-          putStrLn $ (show (length tokenStream)) ++ " Tokens found across " ++
-            (show (length nonOptions)) ++ " file(s)."
+          do
+            putStrLn $ show (length tokenStream) ++ " Tokens found across " ++
+              show (length nonOptions) ++ " file(s)."
+            printParserOutput parseTree
+            exitSuccess
         else
-          putStrLn "Done"
+          exitSuccess
 

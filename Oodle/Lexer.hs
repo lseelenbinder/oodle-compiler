@@ -9,14 +9,14 @@ import Oodle.Token
 import Data.Char
 
 -- The lexer takes a string and parses it according to the Oodle tokens.
-lexer :: String -> FilePath -> [TokenPosition]
+lexer :: String -> FilePath -> [Token]
 lexer cs file =
   filter
     (\token -> getToken token /= NilToken && getToken token /= NilNewlineToken)
     (lexer' cs file 1 1)
 
 -- Helper for lexer. Manages line and coloumns and creating TokenPositions
-lexer' :: String -> FilePath -> Int -> Int -> [TokenPosition]
+lexer' :: String -> FilePath -> Int -> Int -> [Token]
 lexer' [] _ _ _ = []
 lexer' cs' file line col =
   let
@@ -24,7 +24,7 @@ lexer' cs' file line col =
     -- files aren't too big.
     new_col = col + (length cs' - length rest)
   in
-    TokenPosition token file line col :
+    Token token (TokenPosition file line col) :
       (if token == TokenNewline || token == NilNewlineToken
       then
         lexer' rest file (line + 1) 1
@@ -35,7 +35,7 @@ lexer' cs' file line col =
 
 -- lexes a single symbol (and passes sequences to additional functions),
 -- returns the correct token and the remaining text to lex
-lexSymbol :: String -> (Token, String)
+lexSymbol :: String -> (TokenType, String)
 lexSymbol ('~':cs)      = lexComment cs
 lexSymbol ('_':'\n':cs) = (NilNewlineToken, cs)
 lexSymbol ('\n':cs)     = (TokenNewline, cs)
@@ -62,13 +62,13 @@ lexSymbol (c:cs)
   | otherwise = (TokenInvalid c, cs)
 
 -- lex identifiers and keywords
-lexId :: String -> (Token, String)
+lexId :: String -> (TokenType, String)
 lexId cs =
     (lexId' identifier, rest)
   where (identifier, rest) = span (\x -> isAlphaNum x || x == '_') cs
 
 -- Helper for lexId
-lexId' :: String -> Token
+lexId' :: String -> TokenType
 -- Keywords
 lexId' "and"      = TokenAnd
 lexId' "boolean"  = TokenBoolean
@@ -96,29 +96,29 @@ lexId' "while"    = TokenWhile
 lexId' (identifier) = TokenIdentifier identifier
 
 -- lex number literals
-lexNum :: String -> (Token, String)
+lexNum :: String -> (TokenType, String)
 lexNum cs = (TokenIntLiteral (read num), rest)
   where (num,rest) = span isDigit cs
 
 -- lex comments (i.e., skip them)
-lexComment :: String -> (Token, String)
+lexComment :: String -> (TokenType, String)
 lexComment cs = (NilToken, rest)
   where (_, rest) = span (/= '\n') cs
 
 -- lex greater than and greater than equal to
-lexGT :: String -> (Token, String)
+lexGT :: String -> (TokenType, String)
 lexGT ('=':cs) = (TokenGTEq, cs)
 lexGT (cs) = (TokenGT, cs)
 
 -- lex colon and assignment
-lexColon :: String -> (Token, String)
+lexColon :: String -> (TokenType, String)
 lexColon ('=':cs) = (TokenAssign, cs)
 lexColon (cs) = (TokenColon, cs)
 
 -- lex string literals (and catch errors
 -- \xBAD denotes an unterminated string
 -- \xBED denotes an invalid string
-lexString :: String -> (Token, String)
+lexString :: String -> (TokenType, String)
 lexString cs =
   let
     rest = drop (length str) cs

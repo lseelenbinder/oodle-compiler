@@ -3,9 +3,7 @@
 -- Notes: This code probably does not work for Phase 1, as it is not needed.
 
 {
-module Oodle.Parser (
-  parser
-) where
+module Oodle.Parser where
 
 import Oodle.Token
 
@@ -14,8 +12,9 @@ import Oodle.Token
 %name parser
 %tokentype { Token }
 %error { parseError }
-%left 'or'
-%left 'and'
+%monad { E } { thenE } { returnE }
+%left or
+%left and
 %nonassoc '=' '>' '>='
 %left '&'
 %left '+' '-'
@@ -25,57 +24,57 @@ import Oodle.Token
 
 %token
   -- Newline
-  newline      { TokenNewline }
+  newline      { Token TokenNewline _ }
 
   -- Literals
-  intLit    { TokenIntLiteral $$ }
-  strLit    { TokenStringLiteral $$ }
-  id        { TokenIdentifier $$ }
+  intLit    { Token (TokenIntLiteral $$) _ }
+  strLit    { Token (TokenStringLiteral $$) _ }
+  id        { Token (TokenIdentifier $$) _ }
 
   -- Keywords
-  boolean   { TokenBoolean }
-  begin     { TokenBegin }
-  class     { TokenClass }
-  else      { TokenElse }
-  end       { TokenEnd }
-  false     { TokenFalse }
-  from      { TokenFrom }
-  if        { TokenIf }
-  inherits  { TokenInherits }
-  int       { TokenInt }
-  is        { TokenIs }
-  loop      { TokenLoop }
-  me        { TokenMe }
-  new       { TokenNew }
-  not       { TokenNot }
-  null      { TokenNull }
-  string    { TokenString }
-  then      { TokenThen }
-  true      { TokenTrue }
-  while     { TokenWhile }
-  and       { TokenAnd }
-  or        { TokenOr }
+  boolean   { Token TokenBoolean _ }
+  begin     { Token TokenBegin _ }
+  class     { Token TokenClass _ }
+  else      { Token TokenElse _ }
+  end       { Token TokenEnd _ }
+  false     { Token TokenFalse _ }
+  from      { Token TokenFrom _ }
+  if        { Token TokenIf _ }
+  inherits  { Token TokenInherits _ }
+  int       { Token TokenInt _ }
+  is        { Token TokenIs _ }
+  loop      { Token TokenLoop _ }
+  me        { Token TokenMe _ }
+  new       { Token TokenNew _ }
+  not       { Token TokenNot _ }
+  null      { Token TokenNull _ }
+  string    { Token TokenString _ }
+  then      { Token TokenThen _ }
+  true      { Token TokenTrue _ }
+  while     { Token TokenWhile _ }
+  and       { Token TokenAnd _ }
+  or        { Token TokenOr _ }
 
   -- Operators
-  '&'       { TokenStringConcat }
-  '+'       { TokenPlus }
-  '-'       { TokenMinus }
-  '*'       { TokenTimes }
-  '/'       { TokenDiv }
-  '>'       { TokenGT }
-  '>='      { TokenGTEq }
-  '='       { TokenEq }
+  '&'       { Token TokenStringConcat _ }
+  '+'       { Token TokenPlus _ }
+  '-'       { Token TokenMinus _ }
+  '*'       { Token TokenTimes _ }
+  '/'       { Token TokenDiv _ }
+  '>'       { Token TokenGT _ }
+  '>='      { Token TokenGTEq _ }
+  '='       { Token TokenEq _ }
 
   -- Miscellaneous
-  ':='      { TokenAssign }
-  '('       { TokenOP }
-  ')'       { TokenCP }
-  '['       { TokenOB }
-  ']'       { TokenCB }
-  ','       { TokenComma }
-  ';'       { TokenSemicolon }
-  ':'       { TokenColon }
-  '.'       { TokenPeriod }
+  ':='      { Token TokenAssign _ }
+  '('       { Token TokenOP _ }
+  ')'       { Token TokenCP _ }
+  '['       { Token TokenOB _ }
+  ']'       { Token TokenCB _ }
+  ','       { Token TokenComma _ }
+  ';'       { Token TokenSemicolon _ }
+  ':'       { Token TokenColon _ }
+  '.'       { Token TokenPeriod _ }
 
 %%
 
@@ -86,13 +85,13 @@ ClassList     ::                                { [Class] }
 ClassList     : Class                           { [$1] }
               | Class ClassList                 { $1 : $2 }
 
-Class         : class Id InheritsExpr is cr
+Class         : class id InheritsExpr is cr
                 VarList
                 MethodList
-                Id cr                           { Class $2 $3 $6 $7 $8 }
+                id cr                           { Class (Id $2) $3 $6 $7 (Id $8) }
 
 InheritsExpr  ::                                { Id }
-InheritsExpr  : inherits from Id                { $> }
+InheritsExpr  : inherits from id                { Id $> }
               | {- empty -}                     { Id "" }
 
 -- Methods
@@ -100,18 +99,18 @@ MethodList    ::                                { [Method] }
               : Method MethodList               { $1 : $2 }
               | end                             { [] }
 
-Method        : Id '(' ArgumentList ')' is cr
+Method        : id '(' ArgumentList ')' TypeExpression is cr
                 VarList
                 begin cr
                 StatementList
-                end Id cr                       { Method $1 $3 $7 $10 $12 }
+                end id cr                       { Method (Id $1) $5 $3 $8 $11 (Id $13) }
 
 -- Variables
 VarList       ::                                { [Var] }
               : VarList Var                     { (concat [$1, [$2]]) }
               | {- empty -}                     { [] :: [Var] }
 
-Var           : Id TypeExpression InitExpression cr { Var $1 $2 $3}
+Var           : id TypeExpression InitExpression cr { Var (Id $1) $2 $3}
 
 TypeExpression : ':' Type                       { $2 }
                | {- empty -}                    { TypeNull }
@@ -123,7 +122,7 @@ ArgumentList  ::                                { [Argument] }
               | Argument                        { [$1] }
               | {- empty -}                     { [] }
 
-Argument      : Id ':' Type                     { Argument $1 $3 }
+Argument      : id ':' Type                     { Argument (Id $1) $3 }
 
 -- Statements
 StatementList ::                                { [Statement] }
@@ -161,8 +160,8 @@ LoopStatement ::                                { Statement }
 CallStatement ::                                { Statement }
               : CallScope '(' CallExprList ')'  { CallStatement (fst $1) (snd $1) $3 }
 CallScope     ::                                { (Expression, Id) }
-              : Expression '.' Id               { ($1, $3) }
-              | Id                              { (ExpressionNull, $1) }
+              : Expression '.' id               { ($1, (Id $3)) }
+              | id                              { (ExpressionNull, (Id $1)) }
 CallExprList  ::                                { [Expression] }
               : ExpressionList                  { $1 }
               | {- empty -}                     { [] }
@@ -170,7 +169,7 @@ CallExprList  ::                                { [Expression] }
 
 -- Array Indexing
 ArrayIndexList: {- empty -}                     { [] }
-              | ArrayIndexList ArrayIndex       { $2 : $1 }
+              | ArrayIndex ArrayIndexList       { $1 : $2 }
 ArrayIndex    : '[' Expression ']'              { $2 }
 
 
@@ -178,13 +177,13 @@ ArrayIndex    : '[' Expression ']'              { $2 }
 Type          : int                             { TypeInt }
               | string                          { TypeString }
               | boolean                         { TypeBoolean }
-              | Id                              { TypeId $1 }
+              | id                              { TypeId (Id $1) }
               | Type ArrayIndex                 { TypeExp $1 $2 }
 
 
 -- Expression
 Expression    ::                                { Expression }
-              : Id                              { ExpressionId $1 }
+              : id                              { ExpressionId (Id $1) }
               | strLit                          { ExpressionStr $1 }
               | intLit                          { ExpressionInt $1 }
               | true                            { ExpressionTrue }
@@ -195,10 +194,12 @@ Expression    ::                                { Expression }
               | '(' Expression ')'              { $2 }
               | CallScope '(' CallExprList ')'  { ExpressionCall (fst $1) (snd $1) $3 }
 
-              -- Operators
+              -- Unary Operators
               | not Expression %prec UNARY      { ExpressionNot $2 }
               | '-' Expression %prec UNARY      { ExpressionNeg $2 }
               | '+' Expression %prec UNARY      { ExpressionPos $2 }
+
+              -- Binary Operators
               | Expression '*' Expression       { ExpressionMul $1 $3 }
               | Expression '/' Expression       { ExpressionDiv $1 $3 }
               | Expression '+' Expression       { ExpressionAdd $1 $3 }
@@ -219,12 +220,31 @@ ExpressionList::                                { [Expression] }
 -- one or more newlines
 cr            : newline    { }
               | cr newline { }
-
-Id            : id                              { Id $1 }
 {
 
-parseError :: [Token] -> a
-parseError tokenStream = error $ " Parse error at: " ++ (show (head tokenStream))
+data E a = Ok a | Failed String
+  deriving (Show)
+
+thenE :: E a -> (a -> E b) -> E b
+m `thenE` k =
+  case m of
+    Ok a -> k a
+    Failed e -> Failed e
+
+returnE :: a -> E a
+returnE a = Ok a
+
+failE :: String -> E a
+failE err = Failed err
+
+catchE :: E a -> (String -> E a) -> E a
+catchE m k =
+  case m of
+    Ok a -> Ok a
+    Failed e -> k e
+
+
+parseError tokenStream = failE $ "Parse error at: " ++ (printToken (head tokenStream))
 
 data Start
       = Start [Class]
@@ -239,7 +259,13 @@ data Var
   deriving Show
 
 data Method
-      = Method Id [Argument] [Var] [Statement] Id
+      -- Id = Method name
+      -- Type = return type
+      -- [Argument] = arguments
+      -- [Var] = variable declarations
+      -- [Statement] = statments
+      -- Id = ending method name (should match the first)
+      = Method Id Type [Argument] [Var] [Statement] Id
   deriving Show
 
 data Argument = Argument Id Type

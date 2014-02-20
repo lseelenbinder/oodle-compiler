@@ -1,0 +1,26 @@
+~ Test2.ood
+class Main is
+
+  start() is
+  begin
+    if x > 5 then
+      x:= -5 + 5
+      z:= not a or c
+
+      if "A" & "B" = "A" & "B" then
+        x:= -5 + 5
+      end if
+
+    end if
+  end start
+
+  m2(a:int; b:string): boolean is
+  a2: boolean
+  a3: int
+  begin
+    a2[2][3][4] := 5
+
+  end m2
+
+
+end Main

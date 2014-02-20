@@ -33,11 +33,11 @@ test_files/phase1_test.ood:10,28:TokenStringConcat
 test_files/phase1_test.ood:10,30:TokenIdentifier "name"
 test_files/phase1_test.ood:10,34:TokenCP
 test_files/phase1_test.ood:10,35:TokenNewline
-test_files/phase1_test.ood:11,5:TokenIdentifier "end"
+test_files/phase1_test.ood:11,5:TokenEnd
 test_files/phase1_test.ood:11,8:TokenNewline
 test_files/phase1_test.ood:12,1:TokenInvalid '%'
 test_files/phase1_test.ood:12,25:TokenNewline
-test_files/phase1_test.ood:13,1:TokenIdentifier "end"
+test_files/phase1_test.ood:13,1:TokenEnd
 test_files/phase1_test.ood:13,5:TokenUnterminatedString "unterminated"
 test_files/phase1_test.ood:13,18:TokenNewline
 test_files/phase1_test.ood:14,1:TokenInvalidString "hey\\q\""
