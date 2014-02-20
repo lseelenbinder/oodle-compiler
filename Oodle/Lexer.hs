@@ -36,29 +36,31 @@ lexer' cs' file line col =
 -- lexes a single symbol (and passes sequences to additional functions),
 -- returns the correct token and the remaining text to lex
 lexSymbol :: String -> (TokenType, String)
-lexSymbol ('~':cs)      = lexComment cs
-lexSymbol ('_':'\n':cs) = (NilNewlineToken, cs)
-lexSymbol ('\n':cs)     = (TokenNewline, cs)
-lexSymbol ('&':cs)      = (TokenStringConcat, cs)
-lexSymbol ('+':cs)      = (TokenPlus, cs)
-lexSymbol ('-':cs)      = (TokenMinus, cs)
-lexSymbol ('*':cs)      = (TokenTimes, cs)
-lexSymbol ('/':cs)      = (TokenDiv, cs)
-lexSymbol ('>':cs)      = lexGT cs
-lexSymbol ('=':cs)      = (TokenEq, cs)
-lexSymbol (':':cs)      = lexColon cs
-lexSymbol ('(':cs)      = (TokenOP, cs)
-lexSymbol (')':cs)      = (TokenCP, cs)
-lexSymbol ('[':cs)      = (TokenOB, cs)
-lexSymbol (']':cs)      = (TokenCB, cs)
-lexSymbol (',':cs)      = (TokenComma, cs)
-lexSymbol (';':cs)      = (TokenSemicolon, cs)
-lexSymbol ('.':cs)      = (TokenPeriod, cs)
-lexSymbol ('"':cs)      = lexString cs
+lexSymbol ('~':cs)            = lexComment cs
+lexSymbol ('_':'\n':cs)       = (NilNewlineToken, cs)
+lexSymbol ('_':'\r':'\n':cs)  = (NilNewlineToken, cs)
+lexSymbol ('\n':cs)           = (TokenNewline, cs)
+lexSymbol ('\r':'\n':cs)      = (TokenNewline, cs)
+lexSymbol ('&':cs)            = (TokenStringConcat, cs)
+lexSymbol ('+':cs)            = (TokenPlus, cs)
+lexSymbol ('-':cs)            = (TokenMinus, cs)
+lexSymbol ('*':cs)            = (TokenTimes, cs)
+lexSymbol ('/':cs)            = (TokenDiv, cs)
+lexSymbol ('>':cs)            = lexGT cs
+lexSymbol ('=':cs)            = (TokenEq, cs)
+lexSymbol (':':cs)            = lexColon cs
+lexSymbol ('(':cs)            = (TokenOP, cs)
+lexSymbol (')':cs)            = (TokenCP, cs)
+lexSymbol ('[':cs)            = (TokenOB, cs)
+lexSymbol (']':cs)            = (TokenCB, cs)
+lexSymbol (',':cs)            = (TokenComma, cs)
+lexSymbol (';':cs)            = (TokenSemicolon, cs)
+lexSymbol ('.':cs)            = (TokenPeriod, cs)
+lexSymbol ('"':cs)            = lexString cs
 lexSymbol (c:cs)
   | isDigit c = lexNum (c:cs)
   | isSpace c = (NilToken, cs) -- ignore whitespace
-  | isAlpha c || c == '_' = lexId (c:cs)
+  | isAlpha c = lexId (c:cs)
   | otherwise = (TokenInvalid c, cs)
 
 -- lex identifiers and keywords
@@ -97,7 +99,7 @@ lexId' (identifier) = TokenIdentifier identifier
 
 -- lex number literals
 lexNum :: String -> (TokenType, String)
-lexNum cs = (TokenIntLiteral (read num), rest)
+lexNum cs = ((TokenIntLiteral (read num)), rest)
   where (num,rest) = span isDigit cs
 
 -- lex comments (i.e., skip them)
@@ -148,6 +150,7 @@ scanUntilDouble :: String -> String
 scanUntilDouble [] = "\xBAD"
 -- \xBAD denotes an unterminated string due to a newline
 scanUntilDouble('\n':_) = "\xBFD"
+scanUntilDouble('\r':'\n':_) = "\xBFD"
 scanUntilDouble('"':_) = "\"" -- I'm done parsing the string.
 scanUntilDouble ('\\':cs) =
   if not (null octal)
