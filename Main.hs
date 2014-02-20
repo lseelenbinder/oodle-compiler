@@ -112,20 +112,14 @@ main = do
         -- Lex the input files
         tokenStream <- buildTokenStream (nonOptions, verbose)
         let errorCount = countErrorTokens tokenStream
+
         -- Parse the TokenStream
         let parseTree = Oodle.Parser.parser tokenStream
+        let validTree = verifyParse parseTree
 
-        if not $ verifyParse parseTree
+        if not validTree
         then
           printParserOutput parseTree
-        else
-          putStr ""
-
-        if errorCount > 0
-        then
-          do
-            putStrLn $ show ((+) (if verifyParse parseTree then 0 else 1) errorCount) ++ " errors found"
-            exitWith $ ExitFailure 1
         else
           putStr ""
 
@@ -135,7 +129,12 @@ main = do
             putStrLn $ show (length tokenStream) ++ " Tokens found across " ++
               show (length nonOptions) ++ " file(s)."
             printParserOutput parseTree
-            exitSuccess
+        else putStr ""
+
+        putStrLn $ show ((+) (if verifyParse parseTree then 0 else 1) errorCount) ++ " error(s) found"
+
+        if not validTree || errorCount > 0
+        then
+          exitWith $ ExitFailure 1
         else
           exitSuccess
-

@@ -244,7 +244,11 @@ catchE m k =
     Failed e -> k e
 
 
-parseError tokenStream = failE $ "Parse error at: " ++ (printToken (head tokenStream))
+parseError tokenStream = failE $ "Parse error at: " ++(
+  if (length tokenStream) > 0
+  then (printToken (head tokenStream))
+  else "EOF")
+
 
 data Start
       = Start [Class]
