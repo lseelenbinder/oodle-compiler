@@ -2,3 +2,5 @@
 *.o
 Oodle.hs
 oodle
+Oodle.info
+Oodle/Parser.hs
