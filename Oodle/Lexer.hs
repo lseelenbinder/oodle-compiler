@@ -99,7 +99,7 @@ lexId' (identifier) = TokenIdentifier identifier
 
 -- lex number literals
 lexNum :: String -> (TokenType, String)
-lexNum cs = ((TokenIntLiteral (read num)), rest)
+lexNum cs = (TokenIntLiteral (read num), rest)
   where (num,rest) = span isDigit cs
 
 -- lex comments (i.e., skip them)
@@ -139,9 +139,9 @@ lexString cs =
       rest)
   where str = scanUntilDouble cs
 
--------------------
--- Helper Methods--
--------------------
+--------------------
+-- Helper Methods --
+--------------------
 
 -- Scans and validates a string until a double quote is found.
 -- Also validates escape sequences, reporting any invalid sequences.
@@ -152,16 +152,13 @@ scanUntilDouble [] = "\xBAD"
 scanUntilDouble('\n':_) = "\xBFD"
 scanUntilDouble('\r':'\n':_) = "\xBFD"
 scanUntilDouble('"':_) = "\"" -- I'm done parsing the string.
-scanUntilDouble ('\\':cs) =
-  if not (null octal)
-  then
-    if (length octal) /= 3
-    then
-      concat ["\\", octal, scanUntilDouble (drop (length octal) cs), "\xBED"]
-    else
-      '\\' : octal ++ (scanUntilDouble $ drop 3 cs)
-  else
-    if (head cs) `elem` ['t', 'n', 'f', 'r', '"', '\\']
+scanUntilDouble ('\\':cs)
+  | not (null octal) =
+    case length octal of
+      3 -> concat ["\\", octal, scanUntilDouble (drop (length octal) cs), "\xBED"]
+      _ -> '\\' : octal ++ scanUntilDouble (drop 3 cs)
+  | otherwise =
+    if head cs `elem` "tnfr\"\\"
     then
       '\\' : head cs : scanUntilDouble (tail cs)
     else
