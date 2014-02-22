@@ -42,39 +42,27 @@ options =
 -- End Options
 
 -- Prints a token stream or parser errors, depending on the verbose flag.
-printTokenStream :: Bool -> [Token] -> IO ()
-printTokenStream _ [] = putStr ""
+printTokenStream :: Bool -> [Token] -> String
+printTokenStream _ [] = ""
 printTokenStream verbose (t:ts) =
-  do
-    if verbose
-    then
-      putStrLn token_str
-    else
-      if isErrorToken t
-      then
-        putStrLn $ token_str
-      else
-        putStr ""
+  (if verbose || isErrorToken t then printToken t ++ "\n" else "") ++
     printTokenStream verbose ts
-    where (token_str) = printToken t
 
 -- Builds the full token stream from a set of source files.
-buildTokenStream :: ([FilePath], Bool) -> IO [Token]
-buildTokenStream ([], _) = return []
-buildTokenStream (fileNames, verbose) = do
+buildTokenStream :: [FilePath] -> IO [Token]
+buildTokenStream [] = return []
+buildTokenStream fileNames = do
   -- IO recursion
-  tokenStream  <- makeTokenStream (head fileNames) verbose
-  tokenStream' <- buildTokenStream (tail fileNames, verbose)
+  tokenStream  <- makeTokenStream (head fileNames)
+  tokenStream' <- buildTokenStream (tail fileNames)
   -- Concatenate the TokenStreams
   return $ tokenStream ++ tokenStream'
 
 -- Builds a single token stream from a source files.
-makeTokenStream :: FilePath -> Bool -> IO [Token]
-makeTokenStream file verbose =
+makeTokenStream :: FilePath -> IO [Token]
+makeTokenStream file =
   do source <- readFile file
-     let tokenStream = Oodle.Lexer.lexer source file
-     _ <- printTokenStream verbose tokenStream
-     return tokenStream
+     return $ Oodle.Lexer.lexer source file
 
 -- Will eventually print a "pretty" parse tree as well
 printParserOutput :: E a -> IO ()
@@ -110,8 +98,9 @@ main = do
     else
       do
         -- Lex the input files
-        tokenStream <- buildTokenStream (nonOptions, verbose)
+        tokenStream <- buildTokenStream nonOptions
         let errorCount = countErrorTokens tokenStream
+        _ <- putStr $ printTokenStream verbose tokenStream
 
         -- Parse the TokenStream
         let parseTree = Oodle.Parser.parser tokenStream
@@ -126,12 +115,14 @@ main = do
         if verbose
         then
           do
-            putStrLn $ show (length tokenStream) ++ " Tokens found across " ++
+            putStrLn $ show (length tokenStream) ++ " Token(s) found across " ++
               show (length nonOptions) ++ " file(s)."
             printParserOutput parseTree
         else putStr ""
 
-        putStrLn $ show ((+) (if verifyParse parseTree then 0 else 1) errorCount) ++ " error(s) found"
+        putStrLn $ show
+          ((+) (if validTree then 0 else 1) errorCount) ++
+          " error(s) found"
 
         if not validTree || errorCount > 0
         then
