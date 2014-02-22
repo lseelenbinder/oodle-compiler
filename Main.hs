@@ -109,19 +109,17 @@ main = do
         let parseTree = Oodle.Parser.parser (filterInvalidTokens tokenStream)
         let validTree = verifyParse parseTree
 
-        if not validTree
+        if verbose
+        then
+          putStrLn $ show (length tokenStream) ++ " Token(s) found across " ++
+            show (length nonOptions) ++ " file(s)."
+        else putStr ""
+
+        if not validTree || verbose
         then
           printParserOutput parseTree
         else
           putStr ""
-
-        if verbose
-        then
-          do
-            putStrLn $ show (length tokenStream) ++ " Token(s) found across " ++
-              show (length nonOptions) ++ " file(s)."
-            printParserOutput parseTree
-        else putStr ""
 
         putStrLn $ show
           ((+) (if validTree then 0 else 1) errorCount) ++
