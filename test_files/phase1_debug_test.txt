@@ -1,5 +1,3 @@
-Welcome to Luke Seelenbinder's Oodle Compiler
-
 test_files/phase1_test.ood:1,20:TokenNewline
 test_files/phase1_test.ood:2,1:TokenNewline
 test_files/phase1_test.ood:3,1:TokenClass

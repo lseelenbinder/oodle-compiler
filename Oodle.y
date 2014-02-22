@@ -223,8 +223,7 @@ cr            : newline    { }
               | cr newline { }
 {
 
-data E a = Ok a | Failed String
-  deriving (Show)
+data E a = Ok a | Failed String deriving (Show)
 
 thenE :: E a -> (a -> E b) -> E b
 m `thenE` k =
