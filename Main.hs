@@ -74,10 +74,13 @@ verifyParse :: E a -> Bool
 verifyParse (Ok _) = True
 verifyParse (Failed _) = False
 
-
 -- Counts Lexical Error Tokens
 countErrorTokens :: [Token] -> Int
-countErrorTokens tks = foldr (\x y -> if isErrorToken x then y + 1 else y) 0 tks
+countErrorTokens = foldr (\x y -> if isErrorToken x then y + 1 else y) 0
+
+-- Filters invalid tokens
+filterInvalidTokens :: [Token] -> [Token]
+filterInvalidTokens = filter (not . isErrorToken)
 
 -- Main function
 main :: IO ()
@@ -102,8 +105,8 @@ main = do
         let errorCount = countErrorTokens tokenStream
         _ <- putStr $ printTokenStream verbose tokenStream
 
-        -- Parse the TokenStream
-        let parseTree = Oodle.Parser.parser tokenStream
+        -- Parse the token stream
+        let parseTree = Oodle.Parser.parser (filterInvalidTokens tokenStream)
         let validTree = verifyParse parseTree
 
         if not validTree
