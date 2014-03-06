@@ -6,13 +6,15 @@
 module Oodle.Parser where
 
 import Oodle.Token
+import Oodle.ParseTree
+import Data.List.Split (splitOn)
 
 }
 
 %name parser
 %tokentype { Token }
 %error { parseError }
-%monad { E } { thenE } { returnE }
+%monad { E }
 %left or
 %left and
 %nonassoc '=' '>' '>='
@@ -169,9 +171,14 @@ CallExprList  ::                                { [Expression] }
 
 
 -- Array Indexing
-ArrayIndexList: {- empty -}                     { [] }
+ArrayIndexList
+              : {- empty -}                     { [] }
               | ArrayIndex ArrayIndexList       { $1 : $2 }
-ArrayIndex    : '[' Expression ']'              { $2 }
+ArrayIndex
+              : '[' Expression ']'              { $2 }
+ArrayIndexOptExpr
+              : '[' Expression ']'              { $2 }
+              | '[' ']'                         { ExpressionNull }
 
 
 -- Type
@@ -179,7 +186,7 @@ Type          : int                             { TypeInt }
               | string                          { TypeString }
               | boolean                         { TypeBoolean }
               | id                              { TypeId (Id $1) }
-              | Type ArrayIndex                 { TypeExp $1 $2 }
+              | Type ArrayIndexOptExpr          { TypeExp $1 $2 }
 
 
 -- Expression
@@ -223,102 +230,24 @@ cr            : newline    { }
               | cr newline { }
 {
 
-data E a = Ok a | Failed String deriving (Show)
+data E a = Ok a | Failed String | SemanticFail String
+  deriving (Show)
 
-thenE :: E a -> (a -> E b) -> E b
-m `thenE` k =
-  case m of
-    Ok a -> k a
-    Failed e -> Failed e
+instance Monad E where
+  (>>=) m k =
+    case m of
+      Ok a -> k a
+      SemanticFail e -> SemanticFail e
+      Failed e -> Failed e
+  return a  = Ok a
+  fail err  = Failed err
 
-returnE :: a -> E a
-returnE a = Ok a
+failWithToken t err =
+  SemanticFail $ (concatMap (\s -> s ++ ":") . init $ (splitOn ":" (printToken t))) ++ " " ++ err
 
-failE :: String -> E a
-failE err = Failed err
-
-catchE :: E a -> (String -> E a) -> E a
-catchE m k =
-  case m of
-    Ok a -> Ok a
-    Failed e -> k e
-
-
-parseError tokenStream = failE $ "Parse error at: " ++(
+parseError tokenStream = fail $ "Parse error at: " ++(
   if (length tokenStream) > 0
   then (printToken (head tokenStream))
   else "EOF")
 
-
-data Start
-      = Start [Class]
-  deriving Show
-
-data Class
-      = Class Id Id [Var] [Method] Id
-  deriving Show
-
-data Var
-      = Var Id Type Expression
-  deriving Show
-
-data Method
-      -- Id = Method name
-      -- Type = return type
-      -- [Argument] = arguments
-      -- [Var] = variable declarations
-      -- [Statement] = statments
-      -- Id = ending method name (should match the first)
-      = Method Id Type [Argument] [Var] [Statement] Id
-  deriving Show
-
-data Argument = Argument Id Type
-  deriving Show
-
-data Statement
-      = AssignStatement Id Expression
-      | IfStatement Expression [Statement] [Statement]
-      | LoopStatement Expression [Statement]
-      | CallStatement Expression Id [Expression]
-  deriving Show
-
-data Id
-      = Id String
-      | IdArray String [Expression]
-  deriving Show
-
-data Type
-      = TypeInt
-      | TypeNull
-      | TypeString
-      | TypeBoolean
-      | TypeId Id
-      | TypeExp Type Expression
-  deriving Show
-
-data Expression
-      = ExpressionInt Int
-      | ExpressionId Id
-      | ExpressionStr String
-      | ExpressionTrue
-      | ExpressionFalse
-      | ExpressionMe
-      | ExpressionType Type
-      | ExpressionCall Expression Id [Expression]
-      | ExpressionIdArray Id
-      | ExpressionNot Expression
-      | ExpressionNeg Expression
-      | ExpressionPos Expression
-      | ExpressionMul Expression Expression
-      | ExpressionDiv Expression Expression
-      | ExpressionAdd Expression Expression
-      | ExpressionSub Expression Expression
-      | ExpressionStrCat Expression Expression
-      | ExpressionEq Expression Expression
-      | ExpressionGt Expression Expression
-      | ExpressionGtEq Expression Expression
-      | ExpressionAnd Expression Expression
-      | ExpressionOr Expression Expression
-      | ExpressionNull
-  deriving Show
 }
