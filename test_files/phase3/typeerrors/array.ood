@@ -1,0 +1,45 @@
+~ expr1.ood
+~ Tests expression type checking
+
+class Expr1 is
+
+  n1: int
+  n2: int
+  b1: boolean
+  b2: boolean
+  ba: boolean[][]
+  s: string
+
+  doStuff(s: string; x: int; b: boolean): int is
+  begin
+  end doStuff
+
+  start() is
+  begin
+    ~ legal
+
+    b1 := b1
+    b1 := b2
+    ba[1][1] := b1 ~ legal
+    ~ba[1] := b1 ~ illegal
+    b2 := true and (not b1)
+    n1 := 5 * 15 - 2
+    n2 := -35 + 15 * n1 / n2
+    n2 := doStuff("hello", n1, b1)
+    ~out.writeInt(n2)
+
+    if b1 = b2 then
+    end if
+
+
+    b1 := b2
+    n2 := 5 * 3
+    b2 := true
+
+    b2 := false
+    b2 := not b1
+
+  end start
+
+end Expr1
+

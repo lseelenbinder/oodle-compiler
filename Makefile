@@ -1,8 +1,9 @@
-build_and_compile: build_happy compile 
+build_and_compile: build_happy compile
 
-build_happy:
-	~/.cabal/bin/happy -gc -o Oodle/Parser.hs --magic=oodle Oodle.y
-compile:
+build_happy: Oodle.y
+	~/.cabal/bin/happy -gac -o Oodle/Parser.hs --magic=oodle Oodle.y
+
+compile: Main.hs Oodle.y
 	ghc -O Main.hs -o oodle
 
 test:
@@ -23,3 +24,4 @@ install_build_tools:
 	sudo apt-get install ghc6 cabal-install
 	cabal update
 	cabal install happy
+	cabal install split

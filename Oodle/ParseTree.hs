@@ -1,18 +1,20 @@
 module Oodle.ParseTree where
 
+import Oodle.Token (Token)
+
 data Start
-      = Start [Class] SymbolTable
-  deriving Show
+      = Start [Class]
+  deriving (Show, Eq)
 
 data Class
       -- [first] Id = Class Name
       -- [second] Id = Parent Name
-      = Class Id Id [Var] [Method]
-  deriving Show
+      = Class Token Id Id [Var] [Method]
+  deriving (Show, Eq)
 
 data Var
       = Var Id Type Expression
-  deriving Show
+  deriving (Show, Eq)
 
 data Method
       -- Id = Method name
@@ -20,21 +22,24 @@ data Method
       -- [Argument] = arguments
       -- [Var] = variable declarations
       -- [Statement] = statments
-      = Method Id Type [Argument] [Var] [Statement]
-  deriving Show
+      = Method Token Id Type [Argument] [Var] [Statement]
+  deriving (Show, Eq)
 
-data Argument = Argument Id Type
-  deriving Show
+data Argument = Argument Id {- IdArray -} Type
+  deriving (Show, Eq)
 
 data Statement
-      = AssignStatement Id Expression
-      | IfStatement Expression [Statement] [Statement]
-      | LoopStatement Expression [Statement]
-      | CallStatement Expression Id [Expression]
-  deriving Show
+      = AssignStatement Token Id {- IdArray -} Expression
+      --                    conditional if stmts   else stmts
+      | IfStatement   Token Expression [Statement] [Statement]
+      --                    conditional
+      | LoopStatement Token Expression [Statement]
+      --                    scope     name arguments
+      | CallStatement Token Expression Id [Expression]
+  deriving (Show, Eq)
 
 data Id
-      = Id String
+      = Id { getIdString :: String}
       | IdArray String [Expression]
   deriving (Show, Eq)
 
@@ -43,80 +48,39 @@ data Type
       | TypeNull
       | TypeString
       | TypeBoolean
-      | TypeId Id
+      | TypeId {getId :: Id }
       | TypeExp Type Expression
+      | TypeArray Type
+      | TypeNoop
   deriving (Show, Eq)
+
+isArrayType :: Type -> Bool
+isArrayType (TypeArray _) = True
+isArrayType _ = False
 
 data Expression
       = ExpressionInt Int
       | ExpressionId Id
       | ExpressionStr String
-      | ExpressionTrue
-      | ExpressionFalse
-      | ExpressionMe
-      | ExpressionType Type
-      | ExpressionCall Expression Id [Expression]
-      | ExpressionIdArray Id
-      | ExpressionNot Expression
-      | ExpressionNeg Expression
-      | ExpressionPos Expression
-      | ExpressionMul Expression Expression
-      | ExpressionDiv Expression Expression
-      | ExpressionAdd Expression Expression
-      | ExpressionSub Expression Expression
-      | ExpressionStrCat Expression Expression
-      | ExpressionEq Expression Expression
-      | ExpressionGt Expression Expression
-      | ExpressionGtEq Expression Expression
-      | ExpressionAnd Expression Expression
-      | ExpressionOr Expression Expression
-      | ExpressionNull
+      | ExpressionTrue Token
+      | ExpressionFalse Token
+      | ExpressionMe Token
+      | ExpressionNew Token Type
+      | ExpressionCall Token Expression Id [Expression]
+      | ExpressionIdArray Token Id
+      | ExpressionNot Token Expression
+      | ExpressionNeg Token Expression
+      | ExpressionPos Token Expression
+      | ExpressionMul Token Expression Expression
+      | ExpressionDiv Token Expression Expression
+      | ExpressionAdd Token Expression Expression
+      | ExpressionSub Token Expression Expression
+      | ExpressionStrCat Token Expression Expression
+      | ExpressionEq Token Expression Expression
+      | ExpressionGt Token Expression Expression
+      | ExpressionGtEq Token Expression Expression
+      | ExpressionAnd Token Expression Expression
+      | ExpressionOr Token Expression Expression
+      | ExpressionNull Token
+      | ExpressionNoop -- noop
   deriving (Show, Eq)
-
---                             Global   Class    Method
-data SymbolTable = SymbolTable [Symbol] [Symbol] [Symbol]
-  deriving (Show)
-
-data Symbol
-  = SymbolClass String Class
-  | SymbolMethod String Method
-  | SymbolVar String Var
-  deriving (Show)
-
-getSymbolTable :: SymbolTable
-getSymbolTable = SymbolTable
-  [
-  -- in class (w/ readInt)
-  SymbolClass "in" (Class (Id "Reader") (Id "") [] [Method (Id "readInt") TypeInt [] [] []]),
-  -- out class (w/ writeInt)
-  SymbolClass "out" (Class (Id "Writer") (Id "") [] [Method (Id "writeInt") TypeNull [Argument (Id "num") TypeInt] [] []])
-  ] [] []
-
-pushSymbolTable :: SymbolTable -> Symbol -> SymbolTable
-pushSymbolTable (SymbolTable g c m) s = SymbolTable (g ++ [s]) c m
-
-startClass :: SymbolTable -> String -> Class -> SymbolTable
-startClass (SymbolTable g c m) symbol newClass = SymbolTable g (c ++ [SymbolClass symbol newClass]) m
-
-verifySymbolTable :: SymbolTable -> String -> Bool
-verifySymbolTable (SymbolTable g c m) symbol =
-  vsl g && vsl c && vsl m
-  where vsl = verifySymbolList symbol
-
-verifySymbolList :: String -> [Symbol] -> Bool
-verifySymbolList _ [] = True
-verifySymbolList symbol (x:xs) = getSymbol x /= symbol && verifySymbolList symbol xs
-
-getSymbol :: Symbol -> String
-getSymbol (SymbolClass s _) = s
-getSymbol (SymbolMethod s _) = s
-getSymbol (SymbolVar s _) = s
-
-mergeSymbolTable :: SymbolTable -> SymbolTable -> SymbolTable
-mergeSymbolTable (SymbolTable g c m) (SymbolTable g' c' m') = SymbolTable (g ++ g') (c ++ c') (m ++ m')
-
-pushClass :: SymbolTable -> SymbolTable
-pushClass st = st
-
-pushMethod :: SymbolTable -> SymbolTable
-pushMethod st = st
