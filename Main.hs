@@ -152,6 +152,11 @@ main = do
         -- Symbol Table
         let symbolTable = symbolTableBuilder (deE parseTree)
 
+        if (length symbolTable - 4) > length nonOptions then
+          putStrLn "Error: more than one class per file"
+        else
+          putStr ""
+
         -- Type Checking
         let tc = typeChecker symbolTable (deE parseTree)
 
