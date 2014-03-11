@@ -102,7 +102,7 @@ stM mScope (Method tk (Id name) t args vars _:ms) =
   where valid   = verifyPush mScope name
         base    = pushMethod name (buildType t)
         a       = unzip . reverse $ stA args
-        scope   = base (length (fst a)) (fst a) [] : snd a -- initializes the Method scope
+        scope   = base (length (fst a)) (fst a) [] : pushVar name t : snd a -- initializes the Method scope
         v       = stV tk scope vars
         m       = base (length (fst a)) (fst a) v
         mScope' = m : mScope
@@ -117,7 +117,7 @@ stV tk scope (Var (Id name) t _:vs) =
       else error $ msgWithToken tk "redeclared variable" name
     where valid   = verifyPush scope name
           v       = pushVar name (buildType t)
-          scope' = v : scope
+          scope'  = v : scope
 
 stA :: [Argument] -> [(Type, Symbol)]
 stA [] = []
