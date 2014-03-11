@@ -26,7 +26,7 @@ class Expr1 is
     n1 := 5 * 15 - 2
     n2 := -35 + 15 * n1 / n2
     n2 := doStuff("hello", n1, b1)
-    ~out.writeInt(n2)
+    out.writeInt(n2)
 
     if b1 = b2 then
     end if

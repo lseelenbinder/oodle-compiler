@@ -201,9 +201,9 @@ calculateTypeE (st, m, cls, tk) e =
     ExpressionNoop                  -> TypeNoop
 
     -- The only expression that needs secondary verification
-    ExpressionCall _ scope (Id name) args -> if valid then getType method else TypeNoop
-      where method = getMethodDecl (resolveScope (st, m, cls, tk) scope) name
-            valid = tcS (st, m, cls, tk) (CallStatement tk scope (Id name) args)
+    ExpressionCall tk' scope (Id name) args -> if valid then getType method else TypeNoop
+      where method = getMethodDecl (resolveScope (st, m, cls, tk') scope) name
+            valid = tcS (st, m, cls, tk) (CallStatement tk' scope (Id name) args)
 
     ExpressionIdArray _ i           -> getVarType m cls i
     ExpressionNeg _ expr            -> checkTypeE' expr TypeInt
@@ -272,7 +272,10 @@ getVarType m cls (IdArray name exprs) = unbuildArray t (length exprs)
   where t =  getVarType m cls (Id name)
 
 resolveScope :: Scope -> Expression -> Declaration
-resolveScope (st, m, cls, tk) scope =
-  if scope == ExpressionNoop then cls
-  else error $ show $ getNamedDecl st (getIdString (getId class'))
-  where class' = calculateTypeE (st, m, cls, tk) scope
+resolveScope (st, _, cls, tk) scope =
+  case scope of
+    ExpressionNoop          -> cls
+    ExpressionId (Id name)  -> get $ getName $ get name
+      where get       = getNamedDecl st
+            getName   = getIdString . getId . type'
+    _                       -> error $ msgWithToken' tk "scope not a valid expression"
