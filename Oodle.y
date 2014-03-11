@@ -95,7 +95,8 @@ Class
               : class id InheritsExpr is cr
                 VarList
                 MethodList
-                id                              { $$ = Class $1 (Id $2) $3 $6 $7 }
+                id                              { $$ = Class $1 (Id $2) $3 $6 $7;
+                where if $2 == $8 then Ok $2 else failWithToken $1 "Class closing name not equal to beginning name."}
 
 InheritsExpr
               : inherits from id                { $$ = Id $3 }
@@ -110,7 +111,9 @@ Method        : id '(' ArgumentList ')' TypeExpression is cr
                 VarList
                 begin cr
                 StatementList
-                end id cr                       { $$ = Method $2 (Id $1) $5 $3 $8 $11 }
+                end id cr                       { $$ = Method $2 (Id $1) $5 $3 $8 $11
+                ; where if $1 == $13 then Ok $1 else failWithToken $2 "Method closing name not equal to beginning name."
+                }
 
 -- Variables
 VarList
