@@ -214,9 +214,12 @@ calculateTypeE (st, m, cls, tk) e =
     ExpressionSub _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
     ExpressionStrCat _ expr1 expr2  -> checkBothTypeE' expr1 expr2 TypeString
     -- Todo
-    ExpressionEq _ expr1 expr2      -> checkBothTypeMulE' expr1 expr2 [TypeString, TypeInt, TypeBoolean]
-    ExpressionGt _ expr1 expr2      -> checkBothTypeMulE' expr1 expr2 [TypeString, TypeInt]
-    ExpressionGtEq _ expr1 expr2    -> checkBothTypeMulE' expr1 expr2 [TypeString, TypeInt]
+    ExpressionEq _ expr1 expr2      -> TypeBoolean
+      where _ = ($!) checkBothTypeMulE' expr1 expr2 [TypeString, TypeInt, TypeBoolean]
+    ExpressionGt _ expr1 expr2      -> TypeBoolean
+      where _ = ($!) checkBothTypeMulE' expr1 expr2 [TypeString, TypeInt]
+    ExpressionGtEq _ expr1 expr2    -> TypeBoolean
+      where _ = ($!) checkBothTypeMulE' expr1 expr2 [TypeString, TypeInt]
     ExpressionAnd _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeBoolean
     ExpressionOr _ expr1 expr2      -> checkBothTypeE' expr1 expr2 TypeBoolean
     ExpressionNot _ expr            -> checkTypeE' expr TypeBoolean
