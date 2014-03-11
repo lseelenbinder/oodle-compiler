@@ -88,4 +88,4 @@ pushSymbol symbols s = symbols ++ [s]
 
 -- Verify Any Push
 verifyPush :: [Symbol] -> String -> Bool
-verifyPush symbols sym = foldl (\x s -> x && symbol s /= sym) True symbols
+verifyPush symbols sym = all (\s -> symbol s /= sym) symbols
