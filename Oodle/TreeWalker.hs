@@ -214,12 +214,12 @@ calculateTypeE (st, m, cls, tk) e =
     ExpressionSub _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
     ExpressionStrCat _ expr1 expr2  -> checkBothTypeE' expr1 expr2 TypeString
     -- Todo
-    ExpressionEq _ expr1 expr2      -> TypeBoolean
-      where _ = ($!) checkBothTypeMulE' expr1 expr2 [TypeString, TypeInt, TypeBoolean]
-    ExpressionGt _ expr1 expr2      -> TypeBoolean
-      where _ = ($!) checkBothTypeMulE' expr1 expr2 [TypeString, TypeInt]
-    ExpressionGtEq _ expr1 expr2    -> TypeBoolean
-      where _ = ($!) checkBothTypeMulE' expr1 expr2 [TypeString, TypeInt]
+    ExpressionEq _ expr1 expr2      -> if t then TypeBoolean else error "OOPS"
+      where t = checkBothTypeMulE' expr1 expr2 [TypeString, TypeInt, TypeBoolean]
+    ExpressionGt _ expr1 expr2      -> if t then TypeBoolean else error "OOPS"
+      where t = checkBothTypeMulE' expr1 expr2 [TypeString, TypeInt]
+    ExpressionGtEq _ expr1 expr2    -> if t then TypeBoolean else error "OOPS"
+      where t = checkBothTypeMulE' expr1 expr2 [TypeString, TypeInt]
     ExpressionAnd _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeBoolean
     ExpressionOr _ expr1 expr2      -> checkBothTypeE' expr1 expr2 TypeBoolean
     ExpressionNot _ expr            -> checkTypeE' expr TypeBoolean
@@ -238,11 +238,10 @@ checkBothTypeE :: Scope -> Expression -> Expression -> Type -> Type
 checkBothTypeE (st, m, cls, tk) e1 e2 t = checkTypeE' e2 $ checkTypeE' e1 t
   where checkTypeE' = checkTypeE (st, m, cls, tk)
 
-checkBothTypeMulE :: Scope -> Expression -> Expression -> [Type] -> Type
+checkBothTypeMulE :: Scope -> Expression -> Expression -> [Type] -> Bool
 checkBothTypeMulE (_, _, _, tk) _ _ [] = error $ msgWithToken' tk "expression didn't match any of the expected types"
 checkBothTypeMulE scope e1 e2 (t:types) =
-  if t == e1' && t == e2' then t
-  else checkBothTypeMulE scope e1 e2 types
+  t == e1' && t == e2' || checkBothTypeMulE scope e1 e2 types
   where
     ctE = calculateTypeE scope
     e1' = ctE e1
