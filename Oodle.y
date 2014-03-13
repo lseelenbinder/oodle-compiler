@@ -83,12 +83,12 @@ import Data.List.Split (splitOn)
 
 %%
 
-Start         : cr ClassList                    { $$ = Start $2 }
+Start         : nullable_cr ClassList           { $$ = Start $2 }
+nullable_cr   : {- empty -}                     { }
+              | cr                              { }
 
 -- Classes
-ClassList
-              : Class                           { $$ = [$1] }
-              | Class cr                        { $$ = [$1] }
+ClassList     : Class nullable_cr               { $$ = [$1] }
               | Class cr ClassList              { $$ = $1 : $3 }
 
 Class
