@@ -149,14 +149,17 @@ main = do
 
         -- Symbol Table
         let symbolTable = symbolTableBuilder (deE parseTree)
+        -- force SymbolTable to fully evaluate
+        writeFile "/dev/null" (show symbolTable)
 
         when ((length symbolTable - 4) > length nonOptions) $
           hPutStrLn stderr "Error: more than one class per file"
 
         -- Type Checking
         let tc = typeChecker symbolTable (deE parseTree)
+        let tcErrorCount = if tc then errorCount else errorCount + 1
 
-        if not tc || errorCount > 0
+        if tcErrorCount > 0
         then do
           hPutStrLn stderr $ printErrorCount errorCount
           exitFailure
