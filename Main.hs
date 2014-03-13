@@ -12,6 +12,7 @@ import System.Console.GetOpt
 import System.IO
 import System.Environment
 import System.Exit
+import Control.Monad
 import Data.List (intercalate)
 
 -- The following functions are related to options handling and mostly copied from
@@ -67,10 +68,10 @@ makeTokenStream file =
      return $ Oodle.Lexer.lexer source file
 
 -- Will eventually print a "pretty" parse tree as well
-printParserOutput :: E a -> IO ()
-printParserOutput (Ok _) = putStrLn "Parse OK"
-printParserOutput (Failed a) = putStrLn a
-printParserOutput (SemanticFail a) = putStrLn a
+printParserOutput :: E a -> String
+printParserOutput (Ok _) = "Parse OK"
+printParserOutput (Failed msg) = msg
+printParserOutput (SemanticFail msg) = msg
 
 -- Checks if the Parse is successful
 verifyParse :: E a -> Bool
@@ -88,13 +89,13 @@ filterInvalidTokens = filter (not . isErrorToken)
 deE :: E a -> a
 deE (Ok a) = a
 
-printErrorCount :: Int -> IO ()
+printErrorCount :: Int -> String
 printErrorCount c =
-  putStrLn $ show c ++ " error(s) found"
+  show c ++ " error(s) found"
 
-printWarningCount :: Int -> IO ()
+printWarningCount :: Int -> String
 printWarningCount c =
-  putStrLn $ show c ++ " warning(s) found"
+  show c ++ " warning(s) found"
 
 -- Main function
 main :: IO ()
@@ -104,7 +105,7 @@ main = do
     prg <- getProgName
     let (actions, nonOptions, _) = getOpt RequireOrder options args
     opts <- foldl (>>=) (return startOptions) actions
-    let Options { optVerbose = verbose, optLexer = _ } = opts
+    let Options { optVerbose = verbose, optLexer = lexerOnly } = opts
 
     if length nonOptions < 1
     then
@@ -117,53 +118,49 @@ main = do
         -- Lex the input files
         tokenStream <- buildTokenStream nonOptions
         let errorCount = countErrorTokens tokenStream
-        _ <- putStr $ printTokenStream verbose tokenStream
+        when (errorCount > 0) $
+          hPutStrLn stderr $ printTokenStream verbose tokenStream
 
-        if verbose
-        then
-          putStrLn $ show (length tokenStream) ++ " Token(s) found across " ++
+        when (verbose || lexerOnly ) $
+          hPutStrLn stderr $ show (length tokenStream) ++ " Token(s) found across " ++
             show (length nonOptions) ++ " file(s)."
-        else putStr ""
+
+        when lexerOnly $
+          exitWith (if errorCount == 0 then ExitFailure 1 else ExitSuccess)
 
         -- Parse the token stream
         let parseTree = Oodle.Parser.parser (filterInvalidTokens tokenStream)
         let validParse = verifyParse parseTree
 
-        if not validParse
-        then do
-          printParserOutput parseTree
-          printErrorCount (errorCount + 1)
+        unless validParse $ do
+          hPutStrLn stderr $ printParserOutput parseTree
+          hPutStrLn stderr $ printErrorCount (errorCount + 1)
           exitWith $ ExitFailure 1
-        else
-          putStr ""
 
-        if verbose
-        then
-          print parseTree
-        else putStr ""
+        when verbose $
+          hPrint stderr parseTree
 
         -- Run Semantic Checks
         --
         -- Unsupported Features
         let unsupportedFeatures' = unsupportedFeatures $ deE parseTree
         let warningCount = length unsupportedFeatures'
-        putStrLn $ intercalate "\n" unsupportedFeatures'
+        hPutStrLn stderr $ intercalate "\n" unsupportedFeatures'
 
         -- Symbol Table
         let symbolTable = symbolTableBuilder (deE parseTree)
 
-        if (length symbolTable - 4) > length nonOptions then
-          putStrLn "Error: more than one class per file"
-        else
-          putStr ""
+        when ((length symbolTable - 4) > length nonOptions) $
+          hPutStrLn stderr "Error: more than one class per file"
 
         -- Type Checking
         let tc = typeChecker symbolTable (deE parseTree)
 
         if not tc || errorCount > 0
         then do
-          printErrorCount errorCount
-          exitWith $ ExitFailure 1
+          hPutStrLn stderr $ printErrorCount errorCount
+          exitFailure
         else do
-          printWarningCount warningCount
+          hPutStrLn stderr $ printWarningCount warningCount
+          putStrLn "Compilation Successful"
           exitSuccess
