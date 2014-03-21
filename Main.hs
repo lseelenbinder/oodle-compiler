@@ -7,13 +7,15 @@ module Main (main) where
 import Oodle.Parser
 import Oodle.Lexer
 import Oodle.Token
-import Oodle.TreeWalker
+import Oodle.Error
+import Oodle.UnsupportedFeatures (unsupportedFeatures)
+import Oodle.SymbolTable (symbolTableBuilder)
+import Oodle.TypeChecker (typeChecker)
 import System.Console.GetOpt
 import System.IO
 import System.Environment
 import System.Exit
 import Control.Monad
-import Data.List (intercalate)
 
 -- The following functions are related to options handling and mostly copied from
 -- http://hackage.haskell.org/package/base-4.6.0.1/docs/System-Console-GetOpt.html
@@ -68,15 +70,14 @@ makeTokenStream file =
      return $ Oodle.Lexer.lexer source file
 
 -- Will eventually print a "pretty" parse tree as well
-printParserOutput :: E a -> String
+printParserOutput :: Error a -> String
 printParserOutput (Ok _) = "Parse OK"
 printParserOutput (Failed msg) = msg
-printParserOutput (SemanticFail msg) = msg
 
 -- Checks if the Parse is successful
-verifyParse :: E a -> Bool
+verifyParse :: Error a -> Bool
 verifyParse (Ok _) = True
-verifyParse _ = False
+verifyParse (Failed _) = False
 
 -- Counts Lexical Error Tokens
 countErrorTokens :: [Token] -> Int
@@ -85,9 +86,6 @@ countErrorTokens = foldr (\x y -> if isErrorToken x then y + 1 else y) 0
 -- Filters invalid tokens
 filterInvalidTokens :: [Token] -> [Token]
 filterInvalidTokens = filter (not . isErrorToken)
-
-deE :: E a -> a
-deE (Ok a) = a
 
 printErrorCount :: Int -> String
 printErrorCount c =
@@ -107,7 +105,7 @@ main = do
     opts <- foldl (>>=) (return startOptions) actions
     let Options { optVerbose = verbose, optLexer = lexerOnly } = opts
 
-    if length nonOptions < 1
+    if null nonOptions
     then
       do
         hPutStrLn stderr "FATAL ERROR: no input file(s)"
@@ -134,36 +132,43 @@ main = do
 
         unless validParse $ do
           hPutStrLn stderr $ printParserOutput parseTree
-          hPutStrLn stderr $ printErrorCount (errorCount + 1)
+          hPutStrLn stderr $ printErrorCount (succ errorCount)
           exitWith $ ExitFailure 1
 
+        let parseTree' = deE parseTree
+
         when verbose $
-          hPrint stderr parseTree
+          hPrint stderr parseTree'
 
         -- Run Semantic Checks
         --
         -- Unsupported Features
-        let unsupportedFeatures' = unsupportedFeatures $ deE parseTree
+        let unsupportedFeatures' = unsupportedFeatures parseTree'
         let warningCount = length unsupportedFeatures'
-        hPutStrLn stderr $ intercalate "\n" unsupportedFeatures'
+        unless (warningCount == 0) $
+          hPutStrLn stderr $ tail $
+            concatMap (\s -> "\nUnsupported Feature: " ++ s) unsupportedFeatures'
 
         -- Symbol Table
-        let symbolTable = symbolTableBuilder (deE parseTree)
-        -- force SymbolTable to fully evaluate
-        writeFile "/dev/null" (show symbolTable)
+        let symbolTable = symbolTableBuilder parseTree'
+        let validST = verifyParse symbolTable
+        unless validST $ do
+          hPutStrLn stderr $ printParserOutput symbolTable
+          hPutStrLn stderr $ printErrorCount (succ errorCount)
+          exitWith $ ExitFailure 1
 
-        when ((length symbolTable - 4) > length nonOptions) $
+        let symbolTable' = deE symbolTable
+        when ((length symbolTable' - 4) > length nonOptions) $
           hPutStrLn stderr "Error: more than one class per file"
 
         -- Type Checking
-        let tc = typeChecker symbolTable (deE parseTree)
-        let tcErrorCount = if tc then errorCount else errorCount + 1
+        let tc = typeChecker symbolTable' parseTree'
 
-        if tcErrorCount > 0
-        then do
-          hPutStrLn stderr $ printErrorCount errorCount
-          exitFailure
-        else do
-          hPutStrLn stderr $ printWarningCount warningCount
-          putStrLn "Compilation Successful"
-          exitSuccess
+        unless (verifyParse tc) $ do
+          hPutStrLn stderr $ printParserOutput tc
+          hPutStrLn stderr $ printErrorCount (succ errorCount)
+          exitWith $ ExitFailure 1
+
+        hPutStrLn stderr $ printWarningCount warningCount
+        putStrLn "Compilation Successful"
+        exitSuccess

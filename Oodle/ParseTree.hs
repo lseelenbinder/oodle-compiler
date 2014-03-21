@@ -1,6 +1,6 @@
 module Oodle.ParseTree where
 
-import Oodle.Token (Token)
+import Oodle.Token (Token, fakeToken)
 
 data Start
       = Start [Class]
@@ -13,7 +13,7 @@ data Class
   deriving (Show, Eq)
 
 data Var
-      = Var Id Type Expression
+      = Var Token Id Type Expression
   deriving (Show, Eq)
 
 data Method
@@ -25,14 +25,14 @@ data Method
       = Method Token Id Type [Argument] [Var] [Statement]
   deriving (Show, Eq)
 
-data Argument = Argument Id {- IdArray -} Type
+data Argument = Argument Token Id {- Id is an IdArray -} Type
   deriving (Show, Eq)
 
 data Statement
-      = AssignStatement Token Id {- IdArray -} Expression
-      --                    conditional if stmts   else stmts
+      = AssignStatement Token Id {- Id is an IdArray -} Expression
+      --                    conditional if stmts    else stmts
       | IfStatement   Token Expression [Statement] [Statement]
-      --                    conditional
+      --                    conditional do stmts
       | LoopStatement Token Expression [Statement]
       --                    scope     name arguments
       | CallStatement Token Expression Id [Expression]
@@ -59,9 +59,9 @@ isArrayType (TypeArray _) = True
 isArrayType _ = False
 
 data Expression
-      = ExpressionInt Int
-      | ExpressionId Id
-      | ExpressionStr String
+      = ExpressionInt Token Int
+      | ExpressionId Token Id
+      | ExpressionStr Token String
       | ExpressionTrue Token
       | ExpressionFalse Token
       | ExpressionMe Token
@@ -84,3 +84,31 @@ data Expression
       | ExpressionNull Token
       | ExpressionNoop -- noop
   deriving (Show, Eq)
+
+getExprToken :: Expression -> Token
+getExprToken expr =
+  case expr of
+      ExpressionInt tk _    -> tk
+      ExpressionId tk _     -> tk
+      ExpressionStr tk _    -> tk
+      ExpressionTrue tk     -> tk
+      ExpressionFalse tk    -> tk
+      ExpressionMe tk       -> tk
+      ExpressionNew tk _    -> tk
+      ExpressionCall tk _ _ _ -> tk
+      ExpressionIdArray tk _  -> tk
+      ExpressionNot tk _    -> tk
+      ExpressionNeg tk _    -> tk
+      ExpressionPos tk _    -> tk
+      ExpressionMul tk _ _  -> tk
+      ExpressionDiv tk _ _  -> tk
+      ExpressionAdd tk _ _  -> tk
+      ExpressionSub tk _ _  -> tk
+      ExpressionStrCat tk _ _ -> tk
+      ExpressionEq tk _ _   -> tk
+      ExpressionGt tk _ _   -> tk
+      ExpressionGtEq tk _ _ -> tk
+      ExpressionAnd tk _ _  -> tk
+      ExpressionOr tk _ _   -> tk
+      ExpressionNull tk     -> tk
+      ExpressionNoop        -> fakeToken

@@ -3,33 +3,26 @@
 module Oodle.Token where
 
 -- TokenPosition holds the file, line, and column # of a found token
-data TokenPosition = TokenPosition FilePath Int Int
+data TokenPosition = TokenPosition { getFilePath :: FilePath, getLine ::  Int, getCol :: Int }
   deriving (Show, Eq)
 
--- Returns the file path portion of a TokenPosition record.
-getFilePath :: TokenPosition -> FilePath
-getFilePath (TokenPosition file _ _) = file
--- Returns the line portion of a TokenPosition record.
-getLine :: TokenPosition -> Int
-getLine (TokenPosition _ l _) = l
--- Returns the column portion of a TokenPosition record.
-getCol :: TokenPosition -> Int
-getCol (TokenPosition _ _ c) = c
--- Returns a formated string representing a TokenPosition record.
 printToken :: Token -> String
 printToken (Token t (TokenPosition file line col)) =
-  file ++ ":" ++ show line ++ "," ++ show col ++ ":" ++ show t
+  file ++ ":" ++ show line ++ "," ++ show col ++ ": " ++ show t
 
 -- Token is a wrapper for a literal Token and its Position
-data Token = Token TokenType TokenPosition
-  deriving (Show, Eq)
+data Token = Token { getToken :: TokenType, getPosition :: TokenPosition }
+  deriving (Eq)
+
+instance Show Token where
+  show _ = ""
 
 -- TokenType stores the various types of tokens and any data associated with them.
 data TokenType
-      = TokenIntLiteral Int
+      = TokenIntLiteral { getInt :: Int }
       | TokenNewline
-      | TokenStringLiteral String
-      | TokenIdentifier String
+      | TokenStringLiteral { getActual :: String }
+      | TokenIdentifier { getActual :: String }
       | TokenBoolean
       | TokenBegin
       | TokenClass
@@ -69,24 +62,77 @@ data TokenType
       | TokenSemicolon
       | TokenColon
       | TokenPeriod
-      | TokenInvalid Char
-      | TokenUnterminatedString String
-      | TokenInvalidString String
+      | TokenInvalid { getChar :: Char }
+      | TokenUnterminatedString { getActual :: String }
+      | TokenInvalidString { getActual :: String }
       -- Placeholder tokens for the lexer
       | NilToken
       | NilNewlineToken
-  deriving (Show, Eq)
+  deriving (Eq)
 
--- returns the actual token
-getToken :: Token -> TokenType
-getToken (Token t _) = t
+instance Show TokenType where
+  show (tk) =
+    case tk of
+      TokenIntLiteral i -> show i
+      TokenNewline -> "\n"
+      TokenStringLiteral str -> str
+      TokenIdentifier str -> str
+      TokenBoolean      -> "boolean"
+      TokenBegin        -> "begin"
+      TokenClass        -> "class"
+      TokenElse         -> "else"
+      TokenEnd          -> "end"
+      TokenFalse        -> "false"
+      TokenFrom         -> "from"
+      TokenIf           -> "if"
+      TokenInherits     -> "inherits"
+      TokenInt          -> "int"
+      TokenIs           -> "is"
+      TokenLoop         -> "loop"
+      TokenMe           -> "me"
+      TokenNew          -> "new"
+      TokenNot          -> "not"
+      TokenNull         -> "null"
+      TokenString       -> "string"
+      TokenThen         -> "then"
+      TokenTrue         -> "true"
+      TokenWhile        -> "while"
+      TokenAnd          -> "and"
+      TokenOr           -> "or"
+      TokenStringConcat -> "&"
+      TokenPlus         -> "+"
+      TokenMinus        -> "-"
+      TokenTimes        -> "*"
+      TokenDiv          -> "/"
+      TokenGT           -> ">"
+      TokenGTEq         -> ">="
+      TokenEq           -> "="
+      TokenAssign       -> ":="
+      TokenOP           -> "("
+      TokenCP           -> ")"
+      TokenOB           -> "["
+      TokenCB           -> "]"
+      TokenComma        -> ","
+      TokenSemicolon    -> ";"
+      TokenColon        -> ":"
+      TokenPeriod       -> "."
+      TokenInvalid c    -> show c
+      TokenUnterminatedString str -> "Unterminated: " ++ str
+      TokenInvalidString str -> "Invalid: " ++ str
+      NilToken          -> "nilToken"
+      NilNewlineToken   -> "nilNewlineToken"
+
+getTokenStr :: Token -> String
+getTokenStr = getActual . getToken
 
 -- returns true if the token is the result of a lexical error
 isErrorToken :: Token -> Bool
-isErrorToken t = isErrorToken' (getToken t)
+isErrorToken t =
+  case getToken t of
+    TokenInvalid _            -> True
+    TokenUnterminatedString _ -> True
+    TokenInvalidString _      -> True
+    _                         -> False
 
-isErrorToken' :: TokenType -> Bool
-isErrorToken' (TokenInvalid _) = True
-isErrorToken' (TokenUnterminatedString _) = True
-isErrorToken' (TokenInvalidString _) = True
-isErrorToken' _ = False
+fakeToken :: Token
+fakeToken = Token TokenNull (TokenPosition "" 0 0)

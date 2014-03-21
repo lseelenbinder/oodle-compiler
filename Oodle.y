@@ -8,13 +8,14 @@ module Oodle.Parser where
 import Oodle.Token
 import Oodle.ParseTree
 import Data.List.Split (splitOn)
+import Oodle.Error
 
 }
 
 %name parser
 %tokentype { Token }
 %error { parseError }
-%monad { E }
+%monad { Error }
 %left or
 %left and
 %nonassoc '=' '>' '>='
@@ -32,9 +33,9 @@ import Data.List.Split (splitOn)
   newline      { Token TokenNewline _ }
 
   -- Literals
-  intLit    { Token (TokenIntLiteral $$) _ }
-  strLit    { Token (TokenStringLiteral $$) _ }
-  id        { Token (TokenIdentifier $$) _ }
+  intLit    { Token (TokenIntLiteral _) _ }
+  strLit    { Token (TokenStringLiteral _) _ }
+  id        { Token (TokenIdentifier _) _ }
 
   -- Keywords
   boolean   { Token TokenBoolean _ }
@@ -92,14 +93,15 @@ ClassList     : Class nullable_cr               { $$ = [$1] }
               | Class cr ClassList              { $$ = $1 : $3 }
 
 Class
-              : class id InheritsExpr is cr
+              : class Id InheritsExpr is cr
                 VarList
                 MethodList
-                id                              { $$ = Class $1 (Id $2) $3 $6 $7;
-                where if $2 == $8 then Ok $2 else failWithToken $1 "Class closing name not equal to beginning name."}
+                Id                              { $$ = Class $1 $2 $3 $6 $7;
+                where if $2 == $8 then return $2 else failWithToken $1 "Class closing name not equal to beginning name."}
 
+Id            : id                              { $$ = (Id (getTokenStr $1)); $$.tk = $1 }
 InheritsExpr
-              : inherits from id                { $$ = Id $3 }
+              : inherits from Id                { $$ = $3 }
               | {- empty -}                     { $$ = Id "" }
 
 -- Methods
@@ -107,12 +109,12 @@ MethodList
               : Method MethodList               { $$ = $1 : $2 }
               | end                             { $$ = [] }
 
-Method        : id '(' ArgumentList ')' TypeExpression is cr
+Method        : Id '(' ArgumentList ')' TypeExpression is cr
                 VarList
                 begin cr
                 StatementList
-                end id cr                       { $$ = Method $2 (Id $1) $5 $3 $8 $11
-                ; where if $1 == $13 then Ok $1 else failWithToken $2 "Method closing name not equal to beginning name."
+                end Id cr                       { $$ = Method $1.tk $1 $5 $3 $8 $11
+                ; where if $1 == $13 then return $1 else failWithToken $2 "Method closing name not equal to beginning name."
                 }
 
 -- Variables
@@ -120,8 +122,8 @@ VarList
               : VarList VarDecl                 { $$ = reverse ($2 : $1) }
               | {- empty -}                     { $$ = [] }
 
-VarDecl       : id TypeExpression NullableInit cr
-                                                { $$ = Var (Id $1) $2 $3}
+VarDecl       : Id TypeExpression NullableInit cr
+                                                { $$ = Var $1.tk $1 $2 $3}
 
 TypeExpression
               : ':' Type                        { $$ = $2 }
@@ -130,14 +132,14 @@ NullableInit  :
               InitExpression                    { $$ = $1 }
               | {- empty -}                     { $$ = ExpressionNoop }
 InitExpression
-              : ':=' Expression                 { $$ = $2; $$.tk = $1; $2.tk = $1}
+              : ':=' Expression                 { $$ = $2 }
 -- Arguments
 ArgumentList
               : ArgumentList ';' Argument       { $$ = $3 : $1 }
               | Argument                        { $$ = [$1] }
               | {- empty -}                     { $$ = [] }
 
-Argument      : id ':' Type                     { $$ = Argument (Id $1) $3 }
+Argument      : Id ':' Type                     { $$ = Argument $1.tk $1 $3 }
 
 -- Statements
 StatementList
@@ -152,7 +154,7 @@ Statement
 
 -- Assign
 AssignStatement
-              : id ArrayIndexList InitExpression{ $$ = AssignStatement $3.tk (IdArray $1 $2) $3 }
+              : Id ArrayIndexList InitExpression{ $$ = AssignStatement $1.tk (IdArray (getIdString $1) $2) $3 }
 
 -- If
 IfStatement
@@ -169,14 +171,14 @@ ElseClause
 LoopStatement
               : loop while Expression cr
                 StatementList
-                end loop                        { $$ = LoopStatement $1 $3 $5; $3.tk = $2 }
+                end loop                        { $$ = LoopStatement $1 $3 $5 }
 
 -- Call
 CallStatement
-              : CallScope '(' CallExprList ')'  { $$ = CallStatement $2 (fst $1) (snd $1) $3; $3.tk = $2 }
+              : CallScope '(' CallExprList ')'  { $$ = CallStatement $1.tk (fst $1) (snd $1) $3 }
 CallScope
-              : Expression '.' id               { $$ = ($1, (Id $3)); $1.tk = $2 }
-              | id                              { $$ = (ExpressionNoop, (Id $1)) }
+              : Expression '.' Id               { $$ = ($1, $3); $$.tk = $2 }
+              | Id                              { $$ = (ExpressionNoop, $1); $$.tk = $1.tk }
 CallExprList
               : ExpressionList                  { $$ = $1; $1.tk = $$.tk }
               | {- empty -}                     { $$ = [] }
@@ -187,9 +189,9 @@ ArrayIndexList
               : {- empty -}                     { $$ = [] }
               | ArrayIndex ArrayIndexList       { $$ = $1 : $2 }
 ArrayIndex
-              : '[' Expression ']'              { $$ = $2; $2.tk = $1 }
+              : '[' Expression ']'              { $$ = $2 }
 ArrayIndexOptExpr
-              : '[' Expression ']'              { $$ = $2; $2.tk = $1 }
+              : '[' Expression ']'              { $$ = $2 }
               | '[' ']'                         { $$ = ExpressionNoop }
 
 
@@ -197,15 +199,16 @@ ArrayIndexOptExpr
 Type          : int                             { $$ = TypeInt }
               | string                          { $$ = TypeString }
               | boolean                         { $$ = TypeBoolean }
-              | id                              { $$ = TypeId (Id $1) }
+              | Id                              { $$ = TypeId $1 }
               | Type ArrayIndexOptExpr          { $$ = TypeExp $1 $2 }
 
 
 -- Expression
 Expression
-              : id                              { $$ = ExpressionId (Id $1) }
-              | strLit                          { $$ = ExpressionStr $1 }
-              | intLit                          { $$ = ExpressionInt $1 }
+              : Id ArrayIndexList               { $$ = if null $2 then ExpressionId $1.tk $1
+                                                  else ExpressionIdArray $1.tk (IdArray (getIdString $1) $2) }
+              | strLit                          { $$ = ExpressionStr $1 (getTokenStr $1) }
+              | intLit                          { $$ = ExpressionInt $1 (getInt (getToken $1)) }
               | true                            { $$ = ExpressionTrue $1 }
               | false                           { $$ = ExpressionFalse $1 }
               | null                            { $$ = ExpressionNull $1 }
@@ -231,31 +234,17 @@ Expression
               | Expression and Expression       { $$ = ExpressionAnd $2 $1 $3 }
               | Expression or Expression        { $$ = ExpressionOr $2 $1 $3 }
 
-              | id ArrayIndex ArrayIndexList    { $$ = ExpressionIdArray $$.tk (IdArray $1 ($2 : $3)) }
-
 ExpressionList
-              : Expression                      { $$ = [$1]; $1.tk = $$.tk }
-              | Expression ',' ExpressionList   { $$ = $1 : $3; $1.tk = $$.tk; $2.tk = $$.tk }
+              : Expression                      { $$ = [$1] }
+              | Expression ',' ExpressionList   { $$ = $1 : $3 }
 
 -- one or more newlines
 cr            : newline    { }
               | cr newline { }
 {
 
-data E a = Ok a | Failed String | SemanticFail String
-  deriving (Show)
-
-instance Monad E where
-  (>>=) m k =
-    case m of
-      Ok a -> k a
-      SemanticFail e -> SemanticFail e
-      Failed e -> Failed e
-  return a  = Ok a
-  fail err  = Failed err
-
 failWithToken t err =
-  SemanticFail $ (concatMap (\s -> s ++ ":") . init $ (splitOn ":" (printToken t))) ++ " " ++ err
+  fail $ (concatMap (\s -> s ++ ":") . init $ (splitOn ":" (printToken t))) ++ " " ++ err
 
 parseError tokenStream = fail $ "Parse error at: " ++(
   if (length tokenStream) > 0
