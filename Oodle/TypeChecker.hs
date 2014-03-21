@@ -75,7 +75,8 @@ tcS (st, m, cls) (CallStatement tk scope (Id name) args) = do
   if length actualP == length formalP then
     if actualP == formalP then return True
     else
-    fail (msgWithToken tk ("actual parameters do not match formal parameters (" ++ show actualP ++ " !=  "++ show formalP) name)
+    fail (msgWithToken tk ("actual parameters do not match formal parameters ("
+      ++ show actualP ++ " !=  "++ show formalP) name)
   else fail $ msgWithToken tk "incorrect number of parameters" name
 
 tcS' :: Scope -> Expression -> [Statement] -> Error Bool
@@ -103,7 +104,7 @@ calculateTypeE (st, m, cls) e =
     -- The only expression that needs secondary verification
     ExpressionCall tk scope (Id name) args -> do
       valid <- tcS (st, m, cls) (CallStatement tk scope (Id name) args)
-      scp <- (resolveScope (st, m, cls) scope)
+      scp <- resolveScope (st, m, cls) scope
       method <- getMethodDecl scp name
       return $ if valid then getType method else TypeNoop
 
@@ -173,8 +174,7 @@ resolveScope (st, _, cls) scope =
     ExpressionNoop            -> return cls
     ExpressionId _ (Id name)  -> do
       n <- get name
-      n' <- get $ getName n
-      return n'
+      get $ getName n
       where get       = getNamedDecl st
             getName   = getIdString . getId . type'
     _ -> fail $
