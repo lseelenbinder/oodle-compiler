@@ -11,18 +11,23 @@ import Oodle.Error
 import Oodle.UnsupportedFeatures (unsupportedFeatures)
 import Oodle.SymbolTable (symbolTableBuilder)
 import Oodle.TypeChecker (typeChecker)
+import Oodle.CodeGenerator (codeGenerator)
 import System.Console.GetOpt
 import System.IO
+import System.Directory (removeFile)
 import System.Environment
 import System.Exit
+import System.Process (readProcess)
 import Control.Monad
 
 -- The following functions are related to options handling and mostly copied from
 -- http://hackage.haskell.org/package/base-4.6.0.1/docs/System-Console-GetOpt.html
-data Options = Options  { optVerbose :: Bool, optLexer :: Bool }
+data Options = Options  { optVerbose :: Bool, optLexer :: Bool,
+                          optAssembly :: Bool, optDebug :: Bool }
 
 startOptions :: Options
-startOptions = Options  { optVerbose = False, optLexer = False }
+startOptions = Options  { optVerbose = False, optLexer = False,
+                          optAssembly = False, optDebug = False }
 
 options :: [ OptDescr (Options -> IO Options) ]
 options =
@@ -42,6 +47,14 @@ options =
         (NoArg
             (\opt -> return opt { optLexer = True }))
         "Only lex the files"
+    , Option "S" []
+        (NoArg
+            (\opt -> return opt { optAssembly = True }))
+        "Only produce assembly code; do not produce an executable"
+    , Option "g" []
+        (NoArg
+            (\opt -> return opt { optDebug = True }))
+        "Enable debugging"
     ]
 
 -- End Options
@@ -103,7 +116,8 @@ main = do
     prg <- getProgName
     let (actions, nonOptions, _) = getOpt RequireOrder options args
     opts <- foldl (>>=) (return startOptions) actions
-    let Options { optVerbose = verbose, optLexer = lexerOnly } = opts
+    let Options { optVerbose = verbose, optLexer = lexerOnly,
+                  optAssembly = assemblyOnly, optDebug = debug } = opts
 
     if null nonOptions
     then
@@ -169,6 +183,29 @@ main = do
           hPutStrLn stderr $ printErrorCount (succ errorCount)
           exitWith $ ExitFailure 1
 
-        hPutStrLn stderr $ printWarningCount warningCount
-        putStrLn "Compilation Successful"
+        when (warningCount > 0) $ do
+          hPutStrLn stderr $ printWarningCount warningCount
+          hPutStrLn stderr
+            "Cannot produce code for programs with unsupported features."
+          exitWith $ ExitFailure 1
+
+        -- Code Generation
+        let assembly = codeGenerator symbolTable' debug parseTree'
+        let outName = takeWhile (/= '.') (last nonOptions)
+
+        if assemblyOnly then do
+          out <- openFile (outName ++ ".s") WriteMode
+          hPutStrLn out assembly
+          hClose out
+        else do
+          tmp <- openFile "/tmp/file.s" WriteMode
+          hPutStrLn tmp assembly
+          hClose tmp
+          readProcess "gcc" [
+              "-o" ++ outName,
+              "stdlib.o",
+              "/tmp/file.s"
+              ] ""
+          removeFile "/tmp/file.s"
+
         exitSuccess

@@ -10,7 +10,6 @@ import Oodle.SymbolTable
 
 -- Check Types
 --
-type Scope = (SymbolTable, Declaration, Declaration)
 
 typeChecker :: SymbolTable -> Start -> Error Bool
 typeChecker st (Start classes) = do
@@ -145,15 +144,26 @@ checkBothTypeE (st, m, cls) e1 e2 t = do
   where checkTypeE' = checkTypeE (st, m, cls)
 
 checkBothTypeMulE :: Scope -> Expression -> Expression -> [Type] -> Error Bool
-checkBothTypeMulE _ expr _ [] = fail $
-  msgWithToken' (getExprToken expr)
-  "expression didn't match any of the expected types"
+checkBothTypeMulE scope e1 e2 [] = do
+  e1' <- ctE e1
+  e2' <- ctE e1
+
+  fail $
+    msgWithToken' (getExprToken e1)
+    "expression didn't match any of the expected types got: " ++ show e1'
+      ++ " and " ++ show e2'
+
+  where ctE = calculateTypeE scope
+
+
 checkBothTypeMulE scope e1 e2 (t:types) = do
   e1' <- ctE e1
   e2' <- ctE e2
-
-  child <- checkBothTypeMulE scope e1 e2 types
-  return $ t == e1' && t == e2' || child
+  if t == e1' && t == e2'
+  then
+    return True
+  else
+    checkBothTypeMulE scope e1 e2 types
   where ctE = calculateTypeE scope
 
 wrongTypeMsg :: Type -> Type -> String
@@ -167,15 +177,3 @@ getVarType m cls (Id name) = do
 getVarType m cls (IdArray name exprs) = do
   t <- getVarType m cls (Id name)
   return $ unbuildArray t (length exprs)
-
-resolveScope :: Scope -> Expression -> Error Declaration
-resolveScope (st, _, cls) scope =
-  case scope of
-    ExpressionNoop            -> return cls
-    ExpressionId _ (Id name)  -> do
-      n <- get name
-      get $ getName n
-      where get       = getNamedDecl st
-            getName   = getIdString . getId . type'
-    _ -> fail $
-          msgWithToken' (getExprToken scope) "scope not a valid expression"

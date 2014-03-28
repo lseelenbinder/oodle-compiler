@@ -154,7 +154,12 @@ Statement
 
 -- Assign
 AssignStatement
-              : Id ArrayIndexList InitExpression{ $$ = AssignStatement $1.tk (IdArray (getIdString $1) $2) $3 }
+              : Id ArrayIndexList InitExpression{
+              $$ = if $2 == [] then
+                AssignStatement $1.tk $1 $3
+              else
+                AssignStatement $1.tk (IdArray (getIdString $1) $2) $3
+              }
 
 -- If
 IfStatement

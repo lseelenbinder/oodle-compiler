@@ -6,12 +6,17 @@ module Oodle.SymbolTable
     symbolTableBuilder,
     SymbolTable,
     Declaration(..),
+    Scope,
+    findSymbol,
+    isClassDecl,
     getClassDecl,
     getMethodDecl,
     getNamedDecl,
     getType,
+    getMethods,
     getVariables,
     getParameterTypes,
+    resolveScope,
     buildType,
     unbuildArray
     )
@@ -54,6 +59,7 @@ isMethodDecl _ = False
 symbolTableBuilder :: Start -> Error SymbolTable
 symbolTableBuilder = walk
 
+type Scope = (SymbolTable, Declaration, Declaration)
 instance Walkable (Error SymbolTable) where
 
   walk (Start classes) = do
@@ -62,7 +68,7 @@ instance Walkable (Error SymbolTable) where
 
   reduce [] = return []
   reduce symboltables = do
-    ss <- sequence symboltables --liftM concat (join symboltables)
+    ss <- sequence symboltables
 
     let joined = concat ss
 
@@ -70,11 +76,10 @@ instance Walkable (Error SymbolTable) where
     else
       let
         reduce' tk kind symbols =
-          if fst valid then return symbols'
-          else
-            fail $ msgWithToken' tk ("redeclared " ++ kind ++ " " ++ (\(Just s) ->  s) (snd valid))
+          case catchDuplicates symbols' [] of
+            Ok _      -> return symbols'
+            Failed s  -> fail $ msgWithToken' tk ("redeclared " ++ kind ++ " " ++ s)
           where symbols' = takeWhileFirst symbols
-                valid = checkPush symbols'
       in
         case head joined of
           Symbol _ (VarDecl tk _) ->
@@ -85,17 +90,17 @@ instance Walkable (Error SymbolTable) where
             reduce' tk "class" joined
 
   --doArgument _ (Id name) typ        = [pushVar name (buildType typ)]
-  doArgument tk (IdArray name _) typ = Ok [pushVar tk name (buildType typ)]
-  doArgument tk (Id name) typ = Ok [pushVar tk name (buildType typ)]
-  doVariable tk (Id name) typ _ = Ok [pushVar tk name (buildType typ)]
-  doMethod tk (Id name) typ args vars _ = do
-    args' <- args
-    vars' <- vars
-    return [pushMethod tk name (buildType typ) (length args') args' vars']
+  doArgument tk (IdArray name _) typ  = return [pushVar tk name (buildType typ)]
+  doArgument tk (Id name) typ         = return [pushVar tk name (buildType typ)]
+  doVariable tk (Id name) typ _       = return [pushVar tk name (buildType typ)]
   doClass tk (Id name) _ vars methods = do
     vars' <- vars
     methods' <- methods
     return [pushClass tk name vars' methods']
+  doMethod tk (Id name) typ args vars _ = do
+    args' <- args
+    vars' <- vars
+    return [pushMethod tk name (buildType typ) (length args') args' vars']
 
   doAssignStmt _ _ _  = Ok []
   doIfStmt _ _ _ _    = Ok []
@@ -103,19 +108,14 @@ instance Walkable (Error SymbolTable) where
   doCallStmt _ _ _ _  = Ok []
   doExpression _      = Ok []
 
-checkPush :: [Symbol] -> (Bool, Maybe String)
-checkPush symbols =
-  let
-    checkPush' :: [Symbol] -> [String] -> (Bool, Maybe String)
-    checkPush' [] _ = (True, Nothing)
-    checkPush' (s:xs) checked =
-      if sym `elem` checked then
-        (False, Just sym)
-      else
-        checkPush' xs (sym : checked)
-      where sym = symbol s
-  in
-    checkPush' symbols []
+catchDuplicates :: [Symbol] -> [String] -> Error Bool
+catchDuplicates [] _ = return True
+catchDuplicates (s:xs) checked =
+  if sym `elem` checked then
+    fail $ show sym
+  else
+    catchDuplicates xs (sym : checked)
+  where sym = symbol s
 
 getParameterTypes :: Declaration -> [Type]
 getParameterTypes (MethodDecl _ _ _ types _) = types
@@ -126,6 +126,9 @@ getType (MethodDecl _ t _ _ _) = t
 getVariables :: Declaration -> [Symbol]
 getVariables (ClassDecl _ vars _) = vars
 getVariables (MethodDecl _ _ _ _ vars) = vars
+
+getMethods :: Declaration -> [Symbol]
+getMethods (ClassDecl _ _ methods) = methods
 
 getSymbolTable :: SymbolTable
 getSymbolTable =
@@ -158,6 +161,18 @@ findSymbol symbols sym =
   else fail $ "Undeclared variable/method: " ++ sym
   where match = dropWhile (\s -> symbol s /= sym) symbols
 
+resolveScope :: Scope -> Expression -> Error Declaration
+resolveScope (st, _, cls) scope =
+  case scope of
+    ExpressionNoop            -> return cls
+    ExpressionId _ (Id name)  -> do
+      n <- get name
+      get $ getName n
+      where get       = getNamedDecl st
+            getName   = getIdString . getId . type'
+    _ -> fail $
+          msgWithToken' (getExprToken scope) "scope not a valid expression"
+
 -- Class Declarations
 pushClass :: Token -> String -> [Symbol] -> [Symbol] -> Symbol
 pushClass tk sym var methods = Symbol sym (ClassDecl tk var methods)
@@ -175,9 +190,9 @@ pushMethod tk sym t argCount args vars =
 takeWhileFirst :: SymbolTable -> SymbolTable
 takeWhileFirst st =
   case head st of
-    Symbol _ VarDecl{} -> takeWhile isVarDecl st
+    Symbol _ VarDecl{}    -> takeWhile isVarDecl st
     Symbol _ MethodDecl{} -> takeWhile isMethodDecl st
-    Symbol _ ClassDecl{} -> takeWhile isClassDecl st
+    Symbol _ ClassDecl{}  -> takeWhile isClassDecl st
 
 -- Handles building any kind of array type
 buildType :: Type -> Type

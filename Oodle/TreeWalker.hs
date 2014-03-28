@@ -82,6 +82,9 @@ class Walkable a where
           reduce [doAssignStmt tk (IdArray name exprs) expr, e, e']
           where e  = walkExpression expr
                 e' = reduceMap walkExpression exprs
+        AssignStatement tk (Id name) expr ->
+          reduce [doAssignStmt tk (Id name) expr, e]
+          where e  = walkExpression expr
         IfStatement tk expr trueStmts falseStmts ->
           reduce [doIfStmt tk expr trueStmts falseStmts, children]
           where children = walkSParts expr (trueStmts ++ falseStmts)

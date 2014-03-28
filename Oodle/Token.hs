@@ -3,7 +3,7 @@
 module Oodle.Token where
 
 -- TokenPosition holds the file, line, and column # of a found token
-data TokenPosition = TokenPosition { getFilePath :: FilePath, getLine ::  Int, getCol :: Int }
+data TokenPosition = TokenPosition { getFilePath :: FilePath, getLineNo ::  Int, getCol :: Int }
   deriving (Show, Eq)
 
 printToken :: Token -> String

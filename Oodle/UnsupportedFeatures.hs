@@ -40,9 +40,8 @@ instance Walkable [String] where
     | otherwise               = []
     where t = buildType typ
 
-  doAssignStmt tk (IdArray name exprs) _
-    | exprs /= []             = [msgWithToken tk "array indexing" name]
-    | otherwise               = []
+  doAssignStmt _ (Id _) _ = []
+  doAssignStmt tk (IdArray name _) _ = [msgWithToken tk "array indexing" name]
 
   -- Nothing extra to do for these
   doIfStmt   _ _ _ _  = []
