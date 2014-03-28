@@ -96,7 +96,7 @@ Class
               : class Id InheritsExpr is cr
                 VarList
                 MethodList
-                Id                              { $$ = Class $1 $2 $3 $6 $7;
+                Id                              { $$ = Class $1 $2 $3 (reverse $6) $7;
                 where if $2 == $8 then return $2 else failWithToken $1 "Class closing name not equal to beginning name."}
 
 Id            : id                              { $$ = (Id (getTokenStr $1)); $$.tk = $1 }
@@ -113,13 +113,13 @@ Method        : Id '(' ArgumentList ')' TypeExpression is cr
                 VarList
                 begin cr
                 StatementList
-                end Id cr                       { $$ = Method $1.tk $1 $5 $3 $8 $11
+                end Id cr                       { $$ = Method $1.tk $1 $5 $3 (reverse $8) $11
                 ; where if $1 == $13 then return $1 else failWithToken $2 "Method closing name not equal to beginning name."
                 }
 
 -- Variables
 VarList
-              : VarList VarDecl                 { $$ = reverse ($2 : $1) }
+              : VarList VarDecl                 { $$ = ($2 : $1) }
               | {- empty -}                     { $$ = [] }
 
 VarDecl       : Id TypeExpression NullableInit cr
