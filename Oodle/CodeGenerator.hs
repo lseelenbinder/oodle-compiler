@@ -145,7 +145,8 @@ instance WalkableScoped String where
         ExpressionGtEq tk expr1 expr2   -> cmp doE scope tk expr1 expr2 "gteq"
 
         ExpressionCall tk scopeExpr name args ->
-          doCallStmt scope tk scopeExpr name args
+          doCallStmt (st, c, m, False) tk scopeExpr name args
+          where (st, c, m, _) = scope
 
         _                               -> "# TODO"
 
