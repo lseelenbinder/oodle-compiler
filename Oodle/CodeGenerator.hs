@@ -235,7 +235,11 @@ arithmetic f expr1 expr2 op =
 
 doMDorAS :: String -> String
 doMDorAS op
-  | op == "imull" || op == "idivl" = "\tmovl $0, %edx\n\t" ++ op ++ " %ebx" -- eax = e1 op e2
+  | op == "imull" || op == "idivl" = concat [
+    "\tmovl %eax, %edx\n",
+    "\tsarl $31, %edx\n",
+    "\t" ++ op ++ " %ebx\n" -- eax = e1 op e2
+    ]
   | otherwise = "\t" ++ op ++ " %ebx, %eax" -- eax = e1 op e2
 
 cmp :: (Expression -> String) -> Scope -> Token -> Expression -> Expression -> String -> String
