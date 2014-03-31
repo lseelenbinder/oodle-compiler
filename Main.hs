@@ -12,6 +12,7 @@ import Oodle.UnsupportedFeatures (unsupportedFeatures)
 import Oodle.SymbolTable (symbolTableBuilder)
 import Oodle.TypeChecker (typeChecker)
 import Oodle.CodeGenerator (codeGenerator)
+import Data.List (dropWhileEnd)
 import System.Console.GetOpt
 import System.IO
 import System.Directory (removeFile)
@@ -191,7 +192,7 @@ main = do
 
         -- Code Generation
         let assembly = codeGenerator symbolTable' debug parseTree'
-        let outName = takeWhile (/= '.') (last nonOptions)
+        let outName = init (dropWhileEnd (/= '.') (last nonOptions))
 
         if assemblyOnly then do
           out <- openFile (outName ++ ".s") WriteMode
