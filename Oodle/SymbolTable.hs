@@ -100,7 +100,8 @@ instance Walkable (Error SymbolTable) where
   doMethod tk (Id name) typ args vars _ = do
     args' <- args
     vars' <- vars
-    return [pushMethod tk name (buildType typ) (length args') args' vars']
+    return [pushMethod tk name (buildType typ) (length args') args'
+            (pushVar tk name typ : vars' ++ args')]
 
   doAssignStmt _ _ _  = Ok []
   doIfStmt _ _ _ _    = Ok []
