@@ -48,7 +48,7 @@ data Type
       | TypeNull
       | TypeString
       | TypeBoolean
-      | TypeId {getId :: Id }
+      | TypeId { getId :: Id }
       | TypeExp Type Expression
       | TypeArray Type
       | TypeNoop

@@ -9,7 +9,7 @@ import Oodle.Lexer
 import Oodle.Token
 import Oodle.Error
 import Oodle.UnsupportedFeatures (unsupportedFeatures)
-import Oodle.SymbolTable (symbolTableBuilder)
+import Oodle.SymbolTableBuilder (symbolTableBuilder)
 import Oodle.TypeChecker (typeChecker)
 import Oodle.CodeGenerator (codeGenerator)
 import Data.List (dropWhileEnd)
@@ -143,9 +143,8 @@ main = do
 
         -- Parse the token stream
         let parseTree = Oodle.Parser.parser (filterInvalidTokens tokenStream)
-        let validParse = verifyParse parseTree
 
-        unless validParse $ do
+        unless (verifyParse parseTree) $ do
           hPutStrLn stderr $ printParserOutput parseTree
           hPutStrLn stderr $ printErrorCount (succ errorCount)
           exitWith $ ExitFailure 1
@@ -157,17 +156,9 @@ main = do
 
         -- Run Semantic Checks
         --
-        -- Unsupported Features
-        let unsupportedFeatures' = unsupportedFeatures parseTree'
-        let warningCount = length unsupportedFeatures'
-        unless (warningCount == 0) $
-          hPutStrLn stderr $ tail $
-            concatMap (\s -> "\nUnsupported Feature: " ++ s) unsupportedFeatures'
-
         -- Symbol Table
         let symbolTable = symbolTableBuilder parseTree'
-        let validST = verifyParse symbolTable
-        unless validST $ do
+        unless (verifyParse symbolTable) $ do
           hPutStrLn stderr $ printParserOutput symbolTable
           hPutStrLn stderr $ printErrorCount (succ errorCount)
           exitWith $ ExitFailure 1
@@ -175,6 +166,13 @@ main = do
         let symbolTable' = deE symbolTable
         when ((length symbolTable' - 4) > length nonOptions) $
           hPutStrLn stderr "Error: more than one class per file"
+
+        -- Unsupported Features
+        let unsupportedFeatures' = unsupportedFeatures symbolTable' parseTree'
+        let warningCount = length unsupportedFeatures'
+        unless (warningCount == 0) $
+          hPutStrLn stderr $ tail $
+            concatMap (\s -> "\nUnsupported Feature: " ++ s) unsupportedFeatures'
 
         -- Type Checking
         let tc = typeChecker symbolTable' parseTree'

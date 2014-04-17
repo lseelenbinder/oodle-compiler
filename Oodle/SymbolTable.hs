@@ -3,12 +3,13 @@
 module Oodle.SymbolTable
   (
     Symbol(..),
-    symbolTableBuilder,
     SymbolTable,
     Declaration(..),
     Scope,
     findSymbol,
     isClassDecl,
+    isMethodDecl,
+    isVarDecl,
     getClassDecl,
     getMethodDecl,
     getNamedDecl,
@@ -25,7 +26,6 @@ where
 import Oodle.Error
 import Oodle.ParseTree
 import Oodle.Token
-import Oodle.TreeWalker (Walkable(..))
 
 type SymbolTable = [Symbol]
 
@@ -43,6 +43,9 @@ data Declaration
     | VarDecl    { varToken :: Token, type' :: Type }
     deriving (Show, Eq)
 
+--                         Class   Method  Debug
+type Scope = (SymbolTable, Symbol, Symbol, Bool)
+
 isVarDecl :: Symbol -> Bool
 isVarDecl (Symbol _ VarDecl{}) = True
 isVarDecl _ = False
@@ -55,92 +58,20 @@ isMethodDecl :: Symbol -> Bool
 isMethodDecl (Symbol _ MethodDecl{}) = True
 isMethodDecl _ = False
 
--- Build Symbol Table
-symbolTableBuilder :: Start -> Error SymbolTable
-symbolTableBuilder = walk
-
-type Scope = (SymbolTable, Declaration, Declaration)
-instance Walkable (Error SymbolTable) where
-
-  walk (Start classes) = do
-    base <- reduceMap walkClass classes
-    return (getSymbolTable ++ base)
-
-  reduce [] = return []
-  reduce symboltables = do
-    ss <- sequence symboltables
-
-    let joined = concat ss
-
-    if null joined then return []
-    else
-      let
-        reduce' tk kind symbols =
-          case catchDuplicates symbols' [] of
-            Ok _      -> return symbols'
-            Failed s  -> fail $ msgWithToken' tk ("redeclared " ++ kind ++ " " ++ s)
-          where symbols' = takeWhileFirst symbols
-      in
-        case head joined of
-          Symbol _ (VarDecl tk _) ->
-            reduce' tk "variable" joined
-          Symbol _ (MethodDecl tk _ _ _ _) ->
-            reduce' tk "method" joined
-          Symbol _ (ClassDecl tk _ _) ->
-            reduce' tk "class" joined
-
-  --doArgument _ (Id name) typ        = [pushVar name (buildType typ)]
-  doArgument tk (IdArray name _) typ  = return [pushVar tk name (buildType typ)]
-  doArgument tk (Id name) typ         = return [pushVar tk name (buildType typ)]
-  doVariable tk (Id name) typ _       = return [pushVar tk name (buildType typ)]
-  doClass tk (Id name) _ vars methods = do
-    vars' <- vars
-    methods' <- methods
-    return [pushClass tk name vars' methods']
-  doMethod tk (Id name) typ args vars _ = do
-    args' <- args
-    vars' <- vars
-    return [pushMethod tk name (buildType typ) (length args') args'
-            (pushVar tk name typ : vars' ++ args')]
-
-  doAssignStmt _ _ _  = Ok []
-  doIfStmt _ _ _ _    = Ok []
-  doLoopStmt _ _ _    = Ok []
-  doCallStmt _ _ _ _  = Ok []
-  doExpression _      = Ok []
-
-catchDuplicates :: [Symbol] -> [String] -> Error Bool
-catchDuplicates [] _ = return True
-catchDuplicates (s:xs) checked =
-  if sym `elem` checked then
-    fail $ show sym
-  else
-    catchDuplicates xs (sym : checked)
-  where sym = symbol s
-
 getParameterTypes :: Declaration -> [Type]
 getParameterTypes (MethodDecl _ _ _ types _) = types
 
 getType :: Declaration -> Type
 getType (MethodDecl _ t _ _ _) = t
 
-getVariables :: Declaration -> [Symbol]
-getVariables (ClassDecl _ vars _) = vars
-getVariables (MethodDecl _ _ _ _ vars) = vars
+getVariables :: Symbol -> [Symbol]
+getVariables sym =
+  case decl sym of
+    ClassDecl _ vars _ -> vars
+    MethodDecl _ _ _ _ vars -> vars
 
-getMethods :: Declaration -> [Symbol]
-getMethods (ClassDecl _ _ methods) = methods
-
-getSymbolTable :: SymbolTable
-getSymbolTable =
-  [
-  -- global Reader
-  Symbol "Reader" (ClassDecl fakeToken [] [Symbol "readint" (MethodDecl fakeToken TypeInt 0 [] [])]),
-  Symbol "in" (VarDecl fakeToken (TypeId (Id "Reader"))),
-  -- global Writer
-  Symbol "Writer" (ClassDecl fakeToken [] [Symbol "writeint" (MethodDecl fakeToken TypeNull 1 [TypeInt] [])]),
-  Symbol "out" (VarDecl fakeToken (TypeId (Id "Writer")))
-  ]
+getMethods :: Symbol -> [Symbol]
+getMethods (Symbol _ (ClassDecl _ _ methods)) = methods
 
 -- Get a class declaration from a SymbolTable
 getClassDecl :: SymbolTable -> String -> Error Declaration
@@ -159,13 +90,13 @@ getNamedDecl symbols sym = do
 findSymbol :: [Symbol] -> String -> Error Symbol
 findSymbol symbols sym =
   if not $ null match then return $ head match
-  else fail $ "Undeclared variable/method: " ++ sym
+  else fail $ show symbols ++ "\n" ++ "Undeclared variable/method: " ++ sym
   where match = dropWhile (\s -> symbol s /= sym) symbols
 
 resolveScope :: Scope -> Expression -> Error Declaration
-resolveScope (st, _, cls) scope =
+resolveScope (st, cls, _, _) scope =
   case scope of
-    ExpressionNoop            -> return cls
+    ExpressionNoop            -> return (decl cls)
     ExpressionId _ (Id name)  -> do
       n <- get name
       get $ getName n
@@ -173,27 +104,6 @@ resolveScope (st, _, cls) scope =
             getName   = getIdString . getId . type'
     _ -> fail $
           msgWithToken' (getExprToken scope) "scope not a valid expression"
-
--- Class Declarations
-pushClass :: Token -> String -> [Symbol] -> [Symbol] -> Symbol
-pushClass tk sym var methods = Symbol sym (ClassDecl tk var methods)
-
--- Variable Declarations
-pushVar :: Token -> String -> Type -> Symbol
-pushVar tk sym t = Symbol sym (VarDecl tk t)
-
--- Method Declarations
-pushMethod :: Token -> String -> Type -> Int -> [Symbol] -> [Symbol] -> Symbol
-pushMethod tk sym t argCount args vars =
-  Symbol sym (MethodDecl tk t argCount args' vars)
-  where args' = map (type' . decl)  args
-
-takeWhileFirst :: SymbolTable -> SymbolTable
-takeWhileFirst st =
-  case head st of
-    Symbol _ VarDecl{}    -> takeWhile isVarDecl st
-    Symbol _ MethodDecl{} -> takeWhile isMethodDecl st
-    Symbol _ ClassDecl{}  -> takeWhile isClassDecl st
 
 -- Handles building any kind of array type
 buildType :: Type -> Type

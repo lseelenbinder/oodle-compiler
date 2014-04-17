@@ -3,12 +3,12 @@ module Oodle.Error where
 import Oodle.Token (Token, printToken)
 
 data Error a = Ok a | Failed String
-  deriving Show
+  deriving (Show, Eq)
 
 deE :: Error a -> a
 deE (Ok a) = a
 
-instance Monad Error where
+instance (Monad) Error where
   (>>=) m k =
     case m of
       Ok a -> k a

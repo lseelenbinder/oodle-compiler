@@ -1,179 +1,175 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-module Oodle.TypeChecker (typeChecker, buildType) where
 
-import Data.List (nub)
+module Oodle.TypeChecker (typeChecker) where
 
 import Oodle.Error
 import Oodle.ParseTree
-import Oodle.SymbolTable
+import Oodle.SymbolTable (
+  SymbolTable
+  , resolveScope
+  , getMethodDecl
+  , getNamedDecl
+  , getParameterTypes
+  , getVariables
+  , type'
+  , unbuildArray
+  , Scope)
+import qualified Oodle.SymbolTable (getType)
+import Oodle.SymbolTableBuilder (getSymbolTable)
+import Oodle.TreeWalker
+import Oodle.Token (Token)
 
 -- Check Types
 --
 
-typeChecker :: SymbolTable -> Start -> Error Bool
-typeChecker st (Start classes) = do
-  c <- mapM (tcC st) classes
-  return $ and c
+typeChecker :: SymbolTable -> Start -> Error Type
+typeChecker st = walk (st, (head st), (head st), False)
+instance Walkable (Error Type) where
+  reduce types = do
+    t <- sequence types
+    case t of
+      []  -> return TypeNull
+      _   -> return (head t)
 
-tcC :: SymbolTable -> Class -> Error Bool
-tcC st (Class _ (Id name) _ vars methods) = do
-  cd <- getClassDecl st name
-  v <- mapM (tcV (st, cd, cd)) vars
-  m <- mapM (tcM st cd) methods
-  return $ and (v ++ m)
-
-tcV :: Scope -> Var -> Error Bool
-tcV (st, m, cls) (Var tk (Id i) t expr) = do
-  exprT <- calculateTypeE (st, m, cls) expr
-  if (t == exprT) || (t == TypeNull) || (exprT == TypeNoop) then
-    return True
-  else
-    fail (msgWithToken tk (wrongTypeMsg t exprT) i)
-
-tcM :: SymbolTable -> Declaration -> Method -> Error Bool
-tcM st cls (Method _ (Id name) _ _ vars stmts) = do
-  m <- getMethodDecl cls name
-  v <- mapM (tcV (st, m, cls)) vars
-  s <- mapM (tcS (st, m, cls)) stmts
-  return $ and (v ++ s)
-
-tcS :: Scope -> Statement -> Error Bool
-
-tcS (st, m, cls) (AssignStatement tk (Id name) expr) = do
-  tId <- getVarType m cls (Id name)
-  t <- calculateTypeE (st, m, cls) expr
-  if t == tId then
-    return True
-  else
-    fail (msgWithToken' tk $ wrongTypeMsg tId t)
-
-tcS (st, m, cls) (AssignStatement tk (IdArray name exprs) expr) = do
-  tId <- getVarType m cls (IdArray name exprs)
-  t <- calculateTypeE (st, m, cls) expr
-  eT <- mapM (calculateTypeE (st, m, cls)) exprs
-  let e = if null exprs then TypeInt else (head . nub) eT
-  if t == tId then
-    if TypeInt == e then return True
+  doClass     _ _ _ _ _ _ = return TypeNull
+  doMethod  _ _ _ _ _ _ _ = return TypeNull
+  doArgument      _ _ _ _ = return TypeNull
+  doArgumentArr _ _ _ _ _ = return TypeNull
+  doVariable _ tk name t (_, exprT') = do
+    exprT <- exprT'
+    if (t == exprT) || (t == TypeNull) || (exprT == TypeNoop) then
+      return TypeNull
     else
-      fail (msgWithToken' tk $ wrongTypeMsg TypeInt e)
-  else fail $ msgWithToken' tk $ wrongTypeMsg tId t
+      fail (msgWithToken tk (wrongTypeMsg t exprT) name)
 
-tcS (st, m, cls) (IfStatement _ cond stmts stmts') =
-  tcS' (st, m, cls) cond (stmts ++ stmts')
+  doAssignStmtArr scope tk name (arrayScope, arrayScope') (_, exprT') = do
+    t <- getVarType scope (IdArray name arrayScope)
+    arrayScope'' <- arrayScope'
+    exprT <- exprT'
+    if arrayScope'' == TypeInt then
+      if t == exprT then
+        return TypeNull
+      else fail (msgWithToken' tk $ wrongTypeMsg t exprT)
+    else fail (msgWithToken' tk $ wrongTypeMsg TypeInt arrayScope'')
 
-tcS (st, m, cls) (LoopStatement _ cond stmts) =
-  tcS' (st, m, cls) cond stmts
+  doAssignStmt scope tk name (_, expr) = do
+    t <- getVarType scope (Id name)
+    exprT <- expr
+    if t == exprT then
+      return TypeNull
+    else
+      fail (msgWithToken' tk (wrongTypeMsg t exprT))
 
-tcS (st, m, cls) (CallStatement tk scope (Id name) args) = do
-  scope' <- resolveScope (st, m, cls) scope
-  method <- getMethodDecl scope' name
-  actualP <- mapM (calculateTypeE (st, m, cls)) args
+  doIfStmt scope tk cond s _ = doLoopStmt scope tk cond s
+
+  doLoopStmt _ tk (_, cond) _ = do
+    cond' <- cond
+    if cond' == TypeBoolean then
+      return TypeNull
+    else
+      fail $ msgWithToken' tk "conditional not a boolean"
+
+  doCallStmt scope tk (callScope, _) name (args, _) = do
+    actualP <- mapM (doExpression scope) args
+    methodCall scope tk callScope name actualP True
+
+  doExpression scope e =
+    case e of
+      ExpressionInt _ _               -> return TypeInt
+      ExpressionId _ i                -> getVarType scope i
+      ExpressionStr _ _               -> return TypeString
+      ExpressionTrue _                -> return TypeBoolean
+      ExpressionFalse _               -> return TypeBoolean
+      ExpressionMe _                  -> return $ TypeId (Id "me")
+      ExpressionNew _ t               -> return t
+      ExpressionNull _                -> return TypeNull
+      ExpressionNoop                  -> return TypeNoop
+
+      ExpressionCall tk callScope (Id name) args -> do
+        actualP <- mapM (doExpression scope) args
+        methodCall scope tk callScope name actualP False
+
+      ExpressionIdArray _ i           -> getVarType scope i
+      ExpressionNeg _ expr            -> checkTypeE' expr TypeInt
+      ExpressionPos _ expr            -> checkTypeE' expr TypeInt
+      ExpressionMul _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
+      ExpressionDiv _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
+      ExpressionAdd _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
+      ExpressionSub _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
+      ExpressionStrCat _ expr1 expr2  -> checkBothTypeE' expr1 expr2 TypeString
+      ExpressionEq _ expr1 expr2      ->
+        checkTypeArray expr1 expr2 [TypeString, TypeInt, TypeBoolean] >>
+          return TypeBoolean
+      ExpressionGt _ expr1 expr2      ->
+        checkTypeArray expr1 expr2 [TypeString, TypeInt] >> return TypeBoolean
+      ExpressionGtEq _ expr1 expr2    ->
+        checkTypeArray expr1 expr2 [TypeString, TypeInt] >> return TypeBoolean
+      ExpressionAnd _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeBoolean
+      ExpressionOr _ expr1 expr2      -> checkBothTypeE' expr1 expr2 TypeBoolean
+      ExpressionNot _ expr            -> checkTypeE' expr TypeBoolean
+    where
+      checkTypeE'         = checkTypeE scope
+      checkBothTypeE'     = checkBothTypeE scope
+      checkBothTypeMulE'  = checkBothTypeMulE scope
+      checkTypeArray e1 e2 types = checkBothTypeMulE' e1 e2 types
+
+methodCall :: Scope -> Token -> Expression -> String -> [Type] -> Bool -> Error Type
+methodCall scope tk callScope name actualP returnNull = do
+  callScope' <- resolveScope scope callScope
+  method <- getMethodDecl callScope' name
   let formalP = getParameterTypes method
 
   if length actualP == length formalP then
-    if actualP == formalP then return True
+    if actualP == formalP then return
+      (if returnNull then TypeNull else (Oodle.SymbolTable.getType method))
     else
     fail (msgWithToken tk ("actual parameters do not match formal parameters ("
       ++ show actualP ++ " !=  "++ show formalP) name)
   else fail $ msgWithToken tk "incorrect number of parameters" name
 
-tcS' :: Scope -> Expression -> [Statement] -> Error Bool
-tcS' (st, m, cls) expr stmts = do
-  e <- calculateTypeE (st, m, cls) expr
-  s <- mapM (tcS (st, m, cls)) stmts
-  if e == TypeBoolean then return $ and s
-  else
-    error $ msgWithToken' (getExprToken expr) "conditional not a boolean"
-  where
-
-calculateTypeE :: Scope -> Expression -> Error Type
-calculateTypeE (st, m, cls) e =
-  case e of
-    ExpressionInt _ _               -> return TypeInt
-    ExpressionId _ i                -> getVarType m cls i
-    ExpressionStr _ _               -> return TypeString
-    ExpressionTrue _                -> return TypeBoolean
-    ExpressionFalse _               -> return TypeBoolean
-    ExpressionMe _                  -> return $ TypeId (Id "me")
-    ExpressionNew _ t               -> return t
-    ExpressionNull _                -> return TypeNull
-    ExpressionNoop                  -> return TypeNoop
-
-    -- The only expression that needs secondary verification
-    ExpressionCall tk scope (Id name) args -> do
-      valid <- tcS (st, m, cls) (CallStatement tk scope (Id name) args)
-      scp <- resolveScope (st, m, cls) scope
-      method <- getMethodDecl scp name
-      return $ if valid then getType method else TypeNoop
-
-    ExpressionIdArray _ i           -> getVarType m cls i
-    ExpressionNeg _ expr            -> checkTypeE' expr TypeInt
-    ExpressionPos _ expr            -> checkTypeE' expr TypeInt
-    ExpressionMul _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
-    ExpressionDiv _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
-    ExpressionAdd _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
-    ExpressionSub _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
-    ExpressionStrCat _ expr1 expr2  -> checkBothTypeE' expr1 expr2 TypeString
-    ExpressionEq _ expr1 expr2      -> checkTypeArray expr1 expr2 [TypeString, TypeInt, TypeBoolean]
-    ExpressionGt _ expr1 expr2      -> checkTypeArray expr1 expr2 [TypeString, TypeInt]
-    ExpressionGtEq _ expr1 expr2    -> checkTypeArray expr1 expr2 [TypeString, TypeInt]
-    ExpressionAnd _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeBoolean
-    ExpressionOr _ expr1 expr2      -> checkBothTypeE' expr1 expr2 TypeBoolean
-    ExpressionNot _ expr            -> checkTypeE' expr TypeBoolean
-  where
-    checkTypeE'         = checkTypeE (st, m, cls)
-    checkBothTypeE'     = checkBothTypeE (st, m, cls)
-    checkBothTypeMulE'  = checkBothTypeMulE (st, m, cls)
-    checkTypeArray e1 e2 types = do
-      t <- checkBothTypeMulE' e1 e2 types
-      if t then return TypeBoolean else fail "OOPS"
-
 checkTypeE :: Scope -> Expression -> Type -> Error Type
-checkTypeE (st, m, cls) expr expectedT = do
-  t <- calculateTypeE (st, m, cls) expr
+checkTypeE scope expr expectedT = do
+  t <- doExpression scope expr
   if t == expectedT then
     return t
   else
     fail $ msgWithToken' (getExprToken expr) $ wrongTypeMsg expectedT t
 
 checkBothTypeE :: Scope -> Expression -> Expression -> Type -> Error Type
-checkBothTypeE (st, m, cls) e1 e2 t = do
+checkBothTypeE scope e1 e2 t = do
   t' <- checkTypeE' e1 t
   checkTypeE' e2 t'
-  where checkTypeE' = checkTypeE (st, m, cls)
+  where checkTypeE' = checkTypeE scope
 
-checkBothTypeMulE :: Scope -> Expression -> Expression -> [Type] -> Error Bool
+checkBothTypeMulE :: Scope -> Expression -> Expression -> [Type] -> Error Type
 checkBothTypeMulE scope e1 e2 [] = do
   e1' <- ctE e1
-  e2' <- ctE e1
-
-  fail $
-    msgWithToken' (getExprToken e1)
-    "expression didn't match any of the expected types got: " ++ show e1'
-      ++ " and " ++ show e2'
-
-  where ctE = calculateTypeE scope
-
+  e2' <- ctE e2
+  if e1' == e2' then return e1'
+  else
+    fail $ msgWithToken' (getExprToken e1)
+        "expression didn't match any of the expected types got: " ++ show e1'
+        ++ " and " ++ show e2'
+  where ctE = doExpression scope
 
 checkBothTypeMulE scope e1 e2 (t:types) = do
   e1' <- ctE e1
   e2' <- ctE e2
   if t == e1' && t == e2'
   then
-    return True
+    return e1'
   else
     checkBothTypeMulE scope e1 e2 types
-  where ctE = calculateTypeE scope
+  where ctE = doExpression scope
 
 wrongTypeMsg :: Type -> Type -> String
 wrongTypeMsg expectedT t =
   "expected type: " ++ show expectedT ++ " got type: " ++ show t
 
-getVarType :: Declaration -> Declaration -> Id -> Error Type
-getVarType m cls (Id name) = do
-  d <- getNamedDecl (getVariables m ++ getVariables cls) name
+getVarType :: Scope -> Id -> Error Type
+getVarType (_, c, m, _) (Id name) = do
+  d <- getNamedDecl (getSymbolTable ++ getVariables m ++ getVariables c) name
   return $ type' d
-getVarType m cls (IdArray name exprs) = do
-  t <- getVarType m cls (Id name)
+getVarType scope (IdArray name exprs) = do
+  t <- getVarType scope (Id name)
   return $ unbuildArray t (length exprs)

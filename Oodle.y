@@ -135,7 +135,7 @@ InitExpression
               : ':=' Expression                 { $$ = $2 }
 -- Arguments
 ArgumentList
-              : ArgumentList ';' Argument       { $$ = $3 : $1 }
+              : ArgumentList ';' Argument       { $$ = $1 ++ [$3] }
               | Argument                        { $$ = [$1] }
               | {- empty -}                     { $$ = [] }
 

@@ -4,7 +4,6 @@ module Oodle.CodeGenerator where
 
 import Data.List (intercalate)
 
-import Oodle.ScopedTreeWalker
 import Oodle.SymbolTable (
   SymbolTable,
   Symbol,
@@ -13,18 +12,20 @@ import Oodle.SymbolTable (
   symbol,
   decl,
   isClassDecl,
-  getVariables,
   getMethods,
   getType,
   getMethodDecl,
-  resolveScope
+  resolveScope,
+  Scope
   )
 import Oodle.ParseTree
 import Oodle.Error (Error(..), deE)
 import Oodle.Token (Token(..), TokenPosition(..), printToken)
 
+import Oodle.TreeWalker
+
 codeGenerator :: SymbolTable -> Bool -> Start -> String
-codeGenerator st debug start = intercalate  "\n" [
+codeGenerator st debug start = buildString [
   if debug then
     concat [
       ".file   \"" ++ filename ++ "\"\n",
@@ -43,18 +44,19 @@ codeGenerator st debug start = intercalate  "\n" [
   "\tcall " ++ entry ++ "_start",
   "\tpushl $0",
   "\tcall exit",
-  walk st debug start,
+  walk scope start,
   "\n"
   ]
   where entry = getEntryPoint st
         (ClassDecl tk _ _) = decl (st !! 4)
         filename = (getFilePath (getPosition tk))
+        scope = (st, (head st), (head st), debug)
 
 varAssembly :: Symbol -> Symbol -> String -> String
 varAssembly c m var =
   prefix ++ "_" ++ var
 
-  where m' = findSymbol (getVariables (decl m)) var
+  where m' = findSymbol (getMethods c) var
         isM = case m' of
                 Ok _ -> True
                 _ -> False
@@ -67,23 +69,34 @@ getEntryPoint st =
     getEntryPoint' [] = []
     getEntryPoint' (c:cs) =
       if isClassDecl c then
-        case this of
+        case findSymbol (getMethods c) "start" of
           Failed _ -> getEntryPoint' cs
           Ok _ -> (symbol c) : getEntryPoint' cs
       else
         getEntryPoint' cs
-      where this = findSymbol (getMethods (decl c)) "start"
   in
     last (getEntryPoint' st)
 
+instance Walkable String where
+  reduce [] = []
+  reduce strings =
+    case nodeType of
+      "#C"  -> buildString (nodeRest : tail strings)
+      "#M"  -> nodeRest
+      "#E"  -> nodeRest
+      "#A"  -> nodeRest
+      "#V"  -> buildString (nodeRest : tail strings)
+      "#AS" -> nodeRest
+      "#IS" -> nodeRest
+      "#CS" -> nodeRest
+      "#LS" -> nodeRest
+      _     -> buildString (nodeRest : tail strings)
+    where (nodeType, nodeRest) = span (/= '\n') (head strings)
 
-instance WalkableScoped String where
-  reduce = intercalate "\n" . filter (/= "")
+  doClass _ _ _ _ _ _ = "#C\n"
 
-  doClass _ _ _ _ _ _ = ""
-
-  doMethod (_, c, m, d) _ (Id name) _ _ vars stmts =
-    reduce [
+  doMethod (_, c, _, d) _ name _ _ (_, vars) (_, stmts) = buildString [
+    "#M",
     if d then
       ".stabs  \"" ++ name' ++ ":f\",36,0,0," ++ name'
     else "",
@@ -94,12 +107,13 @@ instance WalkableScoped String where
     stmts,
     "\tret"
     ]
-    where  name' = varAssembly c m name
+    where  name' = varAssembly c c name
 
-  doVariable (_, c, m, d) _ (Id name) _ _ =
-    concat [".data\n",
-      if d then ".stabs  \"" ++ var ++ ":g(0,1)\",32,0,0,0\n" else "",
-      "\t.comm ", var, ", 4, 4"
+  doVariable (_, c, m, d) _ name _ _ = buildString [
+    "#V",
+    ".data",
+    if d then ".stabs  \"" ++ var ++ ":g(0,1)\",32,0,0,0" else "",
+    "\t.comm " ++ var ++ ", 4, 4"
     ]
     where var = varAssembly c m name
 
@@ -107,16 +121,19 @@ instance WalkableScoped String where
     let
       doE = doExpression scope
     in
-      case expr of
+      "#E\n" ++
+      (case expr of
         ExpressionInt _ i               -> push ('$' : show i)
         ExpressionId _ (Id name)        ->
-          if name == "out" || name == "in" then ""
-          else push "(" ++ (varAssembly c m name) ++ ")"
+          if name == "out" || name == "in" then
+            ""
+          else
+            push "(" ++ (varAssembly c m name) ++ ")"
           where (_, c, m, _) = scope
         ExpressionTrue _                -> push "$1"
         ExpressionFalse _               -> push "$0"
         ExpressionNoop                  -> ""
-        ExpressionNeg _ expr1           -> reduce [doE expr1,
+        ExpressionNeg _ expr1           -> buildString [doE expr1,
                                             pop "eax",
                                             "\tnegl %eax",
                                             push "%eax"
@@ -132,7 +149,7 @@ instance WalkableScoped String where
         -- Boolean Operators
         ExpressionAnd _ expr1 expr2     -> arithmetic doE expr1 expr2 "andl"
         ExpressionOr _ expr1 expr2      -> arithmetic doE expr1 expr2 "orl"
-        ExpressionNot _ expr1           -> reduce [
+        ExpressionNot _ expr1           -> buildString [
                                             doE expr1,
                                             pop "eax",
                                             "\txorl $1, %eax",
@@ -144,9 +161,11 @@ instance WalkableScoped String where
         ExpressionGt tk expr1 expr2     -> cmp doE scope tk expr1 expr2 "gt"
         ExpressionGtEq tk expr1 expr2   -> cmp doE scope tk expr1 expr2 "gteq"
 
-        ExpressionCall tk scopeExpr name args ->
-          doCallStmt (st, c, m, False) tk scopeExpr name args
+        ExpressionCall tk scopeExpr (Id name) args ->
+          drop 4 $ doCallStmt (st, c, m, False) tk (scopeExpr, expr') name (args, args')
           where (st, c, m, _) = scope
+                expr' = walkExpression scope scopeExpr
+                args' = reduceMap (walkExpression scope) args
 
         _                               -> "# TODO"
 
@@ -161,37 +180,40 @@ instance WalkableScoped String where
         ExpressionIdArray _ i           -> getVarType m cls i
         ExpressionStrCat _ expr1 expr2  -> checkBothTypeE' expr1 expr2 TypeString
         -}
+        )
 
-  doAssignStmt scope tk (Id name) expr  = reduce [comment tk "Assignment",
+  doAssignStmt scope tk name (_, expr)  = buildString [
+    "#AS",
+    comment tk "Assignment",
     debugStatement scope tk,
-    e,
+    expr,
     pop "eax",
     "\tmovl %eax, (" ++ var ++ ")"
     ]
     where (_, c, m, _) = scope
           var = varAssembly c m name
-          e   = walkExpression scope expr
   -- Arrays
   -- doAssignStmt (st, c, m) _ (IdArray name e) _  = error $ show name ++ show e
 
-  -- Also walks children
-  doCallStmt (st, c, m, d) tk scope (Id name) args  = reduce [comment tk "Call",
-      debugStatement (st, c, m, d) tk,
-      e,
-      arguments,
-      "\tcall " ++ name,
-      reduce (take (length args) (repeat (pop "ebx"))), -- get rid of arguments
-      (if getType method /= TypeNull then
-        push "%eax" -- save return value (it's in eax)
-      else "")
-      ]
-    where method = deE $ getMethodDecl (deE $ resolveScope (st, (decl c), (decl c)) scope) name
-          e = walkExpression (st, c, m, d) scope
-          arguments = reduceMap (walkExpression (st, c, m, d)) args
-
-  doIfStmt scope tk cond true false = reduce [comment tk "If",
+  doCallStmt scope tk (callScope', callScope) name (args, args') = buildString [
+    "#CS",
+    comment tk "Call",
     debugStatement scope tk,
-    cond',
+    callScope,
+    args',
+    "\tcall " ++ name,
+    buildString (take (length args) (repeat (pop "ebx"))), -- get rid of arguments
+    (if getType method /= TypeNull then
+      push "%eax" -- save return value (it's in eax)
+    else "")
+    ]
+    where method = deE $ getMethodDecl (deE $ resolveScope scope callScope') name
+
+  doIfStmt scope tk (_, cond) (_, true) (_, false) = buildString [
+    "#IS",
+    comment tk "If",
+    debugStatement scope tk,
+    cond,
     pop "eax",
     "\tcmp $1, %eax",
     "\tjnz startFalse" ++ tag,
@@ -201,13 +223,14 @@ instance WalkableScoped String where
     false,
     "endFalse" ++ tag ++ ":"
     ]
-    where cond' = walkExpression scope cond
-          tag   = buildLabelTag scope tk
+    where tag = buildLabelTag scope tk
 
-  doLoopStmt scope tk cond children = reduce [comment tk "Loop",
+  doLoopStmt scope tk (_, cond) (_, children) = buildString [
+    "#LS",
+    comment tk "Loop",
     debugStatement scope tk,
     start,
-    cond',
+    cond,
     pop "eax",
     "\tcmp $1, %eax",
     "\tjnz " ++ (init done),
@@ -215,16 +238,19 @@ instance WalkableScoped String where
     "\tjmp " ++ (init start),
     done
     ]
-    where cond' = walkExpression scope cond
+    where
           tag   = buildLabelTag scope tk
           start = "startLoop" ++ tag ++ ":"
           done  = "doneLoop" ++ tag ++ ":"
 
-  doArgument _ _ _ _    = "# TODO"
+  doArgument _ _ _ _    = "#A\n"
+
+buildString :: [String] -> String
+buildString = intercalate "\n" . filter (/= "")
 
 arithmetic :: (Expression -> String) -> Expression -> Expression -> String -> String
 arithmetic f expr1 expr2 op =
-  reduce [
+  buildString [
     f expr1,
     f expr2,
     pop "ebx", -- Expression 2
@@ -244,7 +270,7 @@ doMDorAS op
 
 cmp :: (Expression -> String) -> Scope -> Token -> Expression -> Expression -> String -> String
 cmp f scope tk expr1 expr2 op =
-  reduce [
+  buildString [
     f expr1,
     f expr2,
     pop "ebx", -- Expression 2
