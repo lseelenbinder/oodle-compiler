@@ -17,10 +17,7 @@ instance Walkable [String] where
     | parentName /= ""        = [msgWithToken tk "class inheritance" name]
     | otherwise               = []
 
-  doMethod _ tk name _ _ (vars, _) _
-    | name /= "start" = [msgWithToken' tk "method other than 'start'"]
-    | not $ null vars = [msgWithToken' tk "local variables in the start method"]
-    | otherwise       = []
+  doMethod _ _ _ _ _ _ _ = []
 
   doArgumentArr _ tk name _ typ =
       [msgWithToken tk "array indexing" name,

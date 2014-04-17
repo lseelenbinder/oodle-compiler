@@ -64,7 +64,7 @@ instance Walkable (Error SymbolTable) where
     args' <- args
     vars' <- vars
     return [pushMethod tk name (buildType typ) (length args') args'
-              (pushVar tk name typ : vars' ++ args')]
+              (concat [args', [pushVar tk name typ], vars'])]
 
   doAssignStmt _ _ _ _      = return []
   doAssignStmtArr _ _ _ _ _ = return []

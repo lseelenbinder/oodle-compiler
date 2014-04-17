@@ -2,7 +2,8 @@
 
 module Oodle.CodeGenerator where
 
-import Data.List (intercalate)
+import Data.List (intercalate, findIndex)
+import Data.Maybe (fromMaybe)
 
 import Oodle.SymbolTable (
   SymbolTable,
@@ -13,6 +14,7 @@ import Oodle.SymbolTable (
   decl,
   isClassDecl,
   getMethods,
+  getVariables,
   getType,
   getMethodDecl,
   resolveScope,
@@ -42,7 +44,7 @@ codeGenerator st debug start = buildString [
   ".global main",
   "main:",
   "\tcall " ++ entry ++ "_start",
-  "\tpushl $0",
+  push "$0",
   "\tcall exit",
   walk scope start,
   "\n"
@@ -51,16 +53,6 @@ codeGenerator st debug start = buildString [
         (ClassDecl tk _ _) = decl (st !! 4)
         filename = (getFilePath (getPosition tk))
         scope = (st, (head st), (head st), debug)
-
-varAssembly :: Symbol -> Symbol -> String -> String
-varAssembly c m var =
-  prefix ++ "_" ++ var
-
-  where m' = findSymbol (getMethods c) var
-        isM = case m' of
-                Ok _ -> True
-                _ -> False
-        prefix = symbol (if isM then m else c)
 
 getEntryPoint :: SymbolTable -> String
 getEntryPoint st =
@@ -95,23 +87,56 @@ instance Walkable String where
 
   doClass _ _ _ _ _ _ = "#C\n"
 
-  doMethod (_, c, _, d) _ name _ _ (_, vars) (_, stmts) = buildString [
+  doMethod (_, c, _, d) _ name _ (args, _) (vars, _) (_, stmts) = buildString [
     "#M",
+    -- Debug
     if d then
       ".stabs  \"" ++ name' ++ ":f\",36,0,0," ++ name'
     else "",
+
+    -- Method
     ".text",
     name' ++ ":",
-    vars,
-    ".text",
+    -- save and set %ebp
+    push "%ebp",
+    "\tmovl %esp, %ebp",
+
+    -- reserve space for locals & return address
+    "\tsubl $" ++ (show (((length vars) + 1) * 4)) ++ ", %esp",
+
+    -- do the actual work
     stmts,
+
+    -- save return value
+    "\tmovl -4(%ebp), %eax",
+
+    -- cleanup locals
+    "\tmovl %ebp, %esp",
+
+    pop "ebp",
     "\tret"
     ]
     where  name' = varAssembly c c name
 
+  doCallStmt scope tk (callScope', callScope) name (args, args') = buildString [
+    "#CS",
+    comment tk "Call",
+    debugStatement scope tk,
+    callScope,
+    args', -- push arguments
+    "\tcall " ++ varAssembly c m name,
+    "\taddl $" ++ (show ((length args) * 4)) ++ ", %esp", -- get rid of arguments
+    (if getType method /= TypeNull then
+      push "%eax" -- save return value (it's in eax)
+    else "")
+    ]
+    where (_, c, m, _) = scope
+          method = deE $ getMethodDecl (deE $ resolveScope scope callScope') name
+
   doVariable (_, c, m, d) _ name _ _ = buildString [
     "#V",
     ".data",
+    -- TODO: DEBUG for stack variables
     if d then ".stabs  \"" ++ var ++ ":g(0,1)\",32,0,0,0" else "",
     "\t.comm " ++ var ++ ", 4, 4"
     ]
@@ -125,11 +150,8 @@ instance Walkable String where
       (case expr of
         ExpressionInt _ i               -> push ('$' : show i)
         ExpressionId _ (Id name)        ->
-          if name == "out" || name == "in" then
-            ""
-          else
-            push "(" ++ (varAssembly c m name) ++ ")"
-          where (_, c, m, _) = scope
+          if name == "out" || name == "in" then ""
+          else push (calculateOffset scope name)
         ExpressionTrue _                -> push "$1"
         ExpressionFalse _               -> push "$0"
         ExpressionNoop                  -> ""
@@ -188,26 +210,10 @@ instance Walkable String where
     debugStatement scope tk,
     expr,
     pop "eax",
-    "\tmovl %eax, (" ++ var ++ ")"
+    "\tmovl %eax, " ++ calculateOffset scope name
     ]
-    where (_, c, m, _) = scope
-          var = varAssembly c m name
   -- Arrays
   -- doAssignStmt (st, c, m) _ (IdArray name e) _  = error $ show name ++ show e
-
-  doCallStmt scope tk (callScope', callScope) name (args, args') = buildString [
-    "#CS",
-    comment tk "Call",
-    debugStatement scope tk,
-    callScope,
-    args',
-    "\tcall " ++ name,
-    buildString (take (length args) (repeat (pop "ebx"))), -- get rid of arguments
-    (if getType method /= TypeNull then
-      push "%eax" -- save return value (it's in eax)
-    else "")
-    ]
-    where method = deE $ getMethodDecl (deE $ resolveScope scope callScope') name
 
   doIfStmt scope tk (_, cond) (_, true) (_, false) = buildString [
     "#IS",
@@ -215,7 +221,7 @@ instance Walkable String where
     debugStatement scope tk,
     cond,
     pop "eax",
-    "\tcmp $1, %eax",
+    "\tcmpl $1, %eax",
     "\tjnz startFalse" ++ tag,
     true,
     "\tjmp endFalse" ++ tag,
@@ -232,7 +238,7 @@ instance Walkable String where
     start,
     cond,
     pop "eax",
-    "\tcmp $1, %eax",
+    "\tcmpl $1, %eax",
     "\tjnz " ++ (init done),
     children,
     "\tjmp " ++ (init start),
@@ -247,6 +253,39 @@ instance Walkable String where
 
 buildString :: [String] -> String
 buildString = intercalate "\n" . filter (/= "")
+
+calculateOffset :: Scope -> String -> String
+calculateOffset (st, c, m, d) name
+  -- Need to check if it is a local, a parameter, or a class var
+  -- it is a local or a parameter
+  | inM =
+    calculateLocalOffset (st, c, m, d) name
+  -- it is a class variable
+  | otherwise = "(" ++ (varAssembly c m name) ++ ")"
+  where inM     = case findSymbol (getVariables m) name of
+                          Ok _ -> True
+                          Failed _ -> False
+
+calculateLocalOffset :: Scope -> String -> String
+calculateLocalOffset (_, _, m, _) name
+  | nthVar == nthM  = -- return value
+    "-4(%ebp) # offset of return value for (" ++ name ++ ")"
+  | nthVar > nthM   = -- it is a local
+    "-" ++ (show ((nthVar - nthM + 1) * 4)) ++ "(%ebp) # offset of " ++ name
+  | otherwise       = -- it is a parameter
+    -- +2 because of saved %ebp and return address
+    show (((nParams - nthVar - 1) + 2) * 4) ++ "(%ebp) # offset of " ++ name
+  where nthVar  = fromMaybe (error "OOPS")
+                    (findIndex (\s -> symbol s == name) (getVariables m))
+        nthM    = fromMaybe (error "OOPS")
+                    (findIndex (\s -> symbol s == symbol m) (getVariables m))
+        (MethodDecl _ _ nParams _ _) = decl m
+
+varAssembly :: Symbol -> Symbol -> String -> String
+varAssembly c _ var =
+  (if var == "readint" || var == "writeint" then ""
+  else (symbol c) ++ "_") ++ var
+
 
 arithmetic :: (Expression -> String) -> Expression -> Expression -> String -> String
 arithmetic f expr1 expr2 op =
@@ -275,7 +314,7 @@ cmp f scope tk expr1 expr2 op =
     f expr2,
     pop "ebx", -- Expression 2
     pop "eax", -- Expression 1
-    "\tcmp %ebx, %eax",
+    "\tcmpl %ebx, %eax",
     "\tj" ++ (case op of
                 "eq" -> "e"
                 "gt" -> "g"

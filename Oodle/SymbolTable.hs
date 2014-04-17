@@ -38,7 +38,7 @@ data Symbol = Symbol {
 data Declaration
     --                variables    methods
     = ClassDecl Token [Symbol]     [Symbol]
-    --                parameters  parameter types   variables
+    --                      parameters  parameter types   variables
     | MethodDecl Token Type Int         [Type]            [Symbol]
     | VarDecl    { varToken :: Token, type' :: Type }
     deriving (Show, Eq)
