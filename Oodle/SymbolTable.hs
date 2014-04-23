@@ -6,6 +6,7 @@ module Oodle.SymbolTable
     SymbolTable,
     Declaration(..),
     Scope,
+    findDecl,
     findSymbol,
     isClassDecl,
     isMethodDecl,
@@ -74,36 +75,51 @@ getMethods :: Symbol -> [Symbol]
 getMethods (Symbol _ (ClassDecl _ _ methods)) = methods
 
 -- Get a class declaration from a SymbolTable
-getClassDecl :: SymbolTable -> String -> Error Declaration
+getClassDecl :: SymbolTable -> (String, Token) -> Error Declaration
 getClassDecl = getNamedDecl
 
 -- Get a method declaration from a parent class declaration
-getMethodDecl :: Declaration -> String -> Error Declaration
+getMethodDecl :: Declaration -> (String, Token) -> Error Declaration
 getMethodDecl (ClassDecl _ _ methods) = getNamedDecl methods
 
-getNamedDecl :: [Symbol] -> String -> Error Declaration
+getNamedDecl :: [Symbol] -> (String, Token) -> Error Declaration
 getNamedDecl symbols sym = do
   s <- findSymbol symbols sym
   return $ decl s
 
 -- Symbol must exist
-findSymbol :: [Symbol] -> String -> Error Symbol
-findSymbol symbols sym =
+findSymbol :: [Symbol] -> (String, Token) -> Error Symbol
+findSymbol symbols (sym, tk) =
   if not $ null match then return $ head match
-  else fail $ show symbols ++ "\n" ++ "Undeclared variable/method: " ++ sym
+  else
+    fail $ concatMap (\s -> show s ++ "\n") symbols ++
+      "\n" ++ (msgWithToken tk "undeclared variable/method" sym)
   where match = dropWhile (\s -> symbol s /= sym) symbols
 
+-- Symbol must exist
+findDecl :: [Symbol] -> (Declaration, Token) -> Error Symbol
+findDecl symbols (d, tk) =
+  if not $ null match then return $ head match
+  else
+    fail $ concatMap (\s -> show s ++ "\n") symbols ++
+      "\n" ++ (msgWithToken tk "couldn't find declaration" (show d))
+  where match = dropWhile (\s -> decl s /= d) symbols
+
 resolveScope :: Scope -> Expression -> Error Declaration
-resolveScope (st, cls, _, _) scope =
+resolveScope (st, cls, m, _) scope =
   case scope of
     ExpressionNoop            -> return (decl cls)
-    ExpressionId _ (Id name)  -> do
-      n <- get name
-      get $ getName n
-      where get       = getNamedDecl st
+
+    ExpressionId tk (Id name) -> do
+      n <- get (name, tk)
+      get (getName n, tk)
+      where get       = getNamedDecl (getVariables m ++ getVariables cls ++ st)
             getName   = getIdString . getId . type'
+
+    ExpressionNew tk (TypeId (Id name)) -> getNamedDecl st (name, tk)
+
     _ -> fail $
-          msgWithToken' (getExprToken scope) "scope not a valid expression"
+            msgWithToken' (getExprToken scope) "scope not a valid expression"
 
 -- Handles building any kind of array type
 buildType :: Type -> Type

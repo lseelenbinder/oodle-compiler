@@ -50,8 +50,5 @@ instance Walkable [String] where
 
   doExpression _ expr =
     case expr of
-      ExpressionNew   tk _  -> [msgWithToken' tk "new id expression"]
-      ExpressionMe    tk    -> [msgWithToken' tk "me expression"]
-      ExpressionNull  tk    -> [msgWithToken' tk "null expression"]
       ExpressionStr   tk _  -> [msgWithToken' tk "string literal"]
       _                     -> []

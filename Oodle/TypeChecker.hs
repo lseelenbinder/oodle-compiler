@@ -13,14 +13,18 @@ import Oodle.SymbolTable (
   , getVariables
   , type'
   , unbuildArray
+  , symbol
   , Scope)
 import qualified Oodle.SymbolTable (getType)
 import Oodle.SymbolTableBuilder (getSymbolTable)
 import Oodle.TreeWalker
-import Oodle.Token (Token)
+import Oodle.Token (Token, fakeToken)
 
 -- Check Types
 --
+
+yay :: Error Type
+yay = return TypeNull
 
 typeChecker :: SymbolTable -> Start -> Error Type
 typeChecker st = walk (st, (head st), (head st), False)
@@ -28,17 +32,17 @@ instance Walkable (Error Type) where
   reduce types = do
     t <- sequence types
     case t of
-      []  -> return TypeNull
+      []  -> yay
       _   -> return (head t)
 
-  doClass     _ _ _ _ _ _ = return TypeNull
-  doMethod  _ _ _ _ _ _ _ = return TypeNull
-  doArgument      _ _ _ _ = return TypeNull
-  doArgumentArr _ _ _ _ _ = return TypeNull
+  doClass     _ _ _ _ _ _ = yay
+  doMethod  _ _ _ _ _ _ _ = yay
+  doArgument      _ _ _ _ = yay
+  doArgumentArr _ _ _ _ _ = yay
   doVariable _ tk name t (_, exprT') = do
     exprT <- exprT'
     if (t == exprT) || (t == TypeNull) || (exprT == TypeNoop) then
-      return TypeNull
+      yay
     else
       fail (msgWithToken tk (wrongTypeMsg t exprT) name)
 
@@ -48,24 +52,30 @@ instance Walkable (Error Type) where
     exprT <- exprT'
     if arrayScope'' == TypeInt then
       if t == exprT then
-        return TypeNull
+        yay
       else fail (msgWithToken' tk $ wrongTypeMsg t exprT)
     else fail (msgWithToken' tk $ wrongTypeMsg TypeInt arrayScope'')
 
   doAssignStmt scope tk name (_, expr) = do
     t <- getVarType scope (Id name)
     exprT <- expr
+    let failMe = fail (msgWithToken' tk (wrongTypeMsg t exprT))
+
     if t == exprT then
-      return TypeNull
+      yay
     else
-      fail (msgWithToken' tk (wrongTypeMsg t exprT))
+      case t of
+        TypeId _  -> if exprT == TypeNull then yay
+                      else failMe
+        _         -> failMe
+
 
   doIfStmt scope tk cond s _ = doLoopStmt scope tk cond s
 
   doLoopStmt _ tk (_, cond) _ = do
     cond' <- cond
     if cond' == TypeBoolean then
-      return TypeNull
+      yay
     else
       fail $ msgWithToken' tk "conditional not a boolean"
 
@@ -80,12 +90,19 @@ instance Walkable (Error Type) where
       ExpressionStr _ _               -> return TypeString
       ExpressionTrue _                -> return TypeBoolean
       ExpressionFalse _               -> return TypeBoolean
-      ExpressionMe _                  -> return $ TypeId (Id "me")
+      ExpressionMe _                  -> return $ TypeId (Id className)
+        where (_, c, _, _)  = scope
+              className     = symbol c
       ExpressionNew _ t               -> return t
-      ExpressionNull _                -> return TypeNull
+      ExpressionNull _                -> yay
       ExpressionNoop                  -> return TypeNoop
 
       ExpressionCall tk callScope (Id name) args -> do
+        actualP <- mapM (doExpression scope) args
+        methodCall scope tk callScope name actualP False
+
+      -- TODO: Arrays
+      ExpressionCall tk callScope (IdArray name _) args -> do
         actualP <- mapM (doExpression scope) args
         methodCall scope tk callScope name actualP False
 
@@ -116,7 +133,7 @@ instance Walkable (Error Type) where
 methodCall :: Scope -> Token -> Expression -> String -> [Type] -> Bool -> Error Type
 methodCall scope tk callScope name actualP returnNull = do
   callScope' <- resolveScope scope callScope
-  method <- getMethodDecl callScope' name
+  method <- getMethodDecl callScope' (name, tk)
   let formalP = getParameterTypes method
 
   if length actualP == length formalP then
@@ -168,7 +185,7 @@ wrongTypeMsg expectedT t =
 
 getVarType :: Scope -> Id -> Error Type
 getVarType (_, c, m, _) (Id name) = do
-  d <- getNamedDecl (getSymbolTable ++ getVariables m ++ getVariables c) name
+  d <- getNamedDecl (getSymbolTable ++ getVariables m ++ getVariables c) (name, fakeToken)
   return $ type' d
 getVarType scope (IdArray name exprs) = do
   t <- getVarType scope (Id name)

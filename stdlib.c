@@ -1,4 +1,5 @@
 #include <syscall.h>
+#define NULL 0
 
 void writeint(int num) {
   char buf[20];
@@ -77,4 +78,13 @@ int readint() {
   if (neg) sum = -sum;
 
   return sum;
+}
+
+void nullpointertest(int lineno, void* ptr) {
+  if (ptr == NULL) {
+    char msg[] = "Runtime errory: null pointer exception on line \0";
+    write(1, msg, sizeof(msg)-1);
+    writeint(lineno);
+    exit(0);
+  }
 }

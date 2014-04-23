@@ -74,14 +74,14 @@ class Walkable a where
 
   walkClass (st, _, _, debug) (Class tk (Id className) (Id parentName) vars methods) =
       reduce [doClass nScope tk className parentName (vars, v) (methods, m), v, m]
-    where (Ok c)  = findSymbol st className
+    where (Ok c)  = findSymbol st (className, tk)
           nScope  = (st, c, c, debug)
           v       = reduceMap (walkVariable nScope) vars
           m       = reduceMap (walkMethod nScope) methods
 
   walkMethod (st, c, _, debug) (Method tk (Id name) typ args vars stmts) =
       reduce [doMethod nScope tk name typ (args, a) (vars, v) (stmts, s), a, v, s]
-    where (Ok m)  = findSymbol (getMethods c) name
+    where (Ok m)  = findSymbol (getMethods c) (name, tk)
           nScope  = (st, c, m, debug)
           a       = reduceMap (walkArgument nScope) args
           v       = reduceMap (walkVariable nScope) vars
