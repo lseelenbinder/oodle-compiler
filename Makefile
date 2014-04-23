@@ -1,8 +1,11 @@
-compile: Main.hs Oodle/Parser.hs
+compile: Main.hs Oodle/Parser.hs stdlib.o
 	ghc -O Main.hs -o oodle
 
 Oodle/Parser.hs: Oodle.y
 	~/.cabal/bin/happy -gac -o Oodle/Parser.hs --magic=oodle Oodle.y
+
+stdlib.o: stdlib.c
+	gcc -c stdlib.c
 
 test:
 	@echo "Testing Oodle Compiler...\n(an empty diff is a passing test)\n\n"
