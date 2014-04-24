@@ -22,6 +22,7 @@ import Oodle.SymbolTable (
 import Oodle.ParseTree
 import Oodle.Error (Error(..), deE)
 import Oodle.Token (Token(..), TokenPosition(..), printToken, fakeToken)
+import Oodle.TypeChecker (typeOfExpression)
 
 import Oodle.TreeWalker
 
@@ -183,98 +184,121 @@ instance Walkable String where
     -}
 
   doExpression scope expr =
-    let
-      doE = doExpression scope
-    in
-      "#E\n" ++
-      (case expr of
-        ExpressionInt _ i               -> push ('$' : show i)
-        ExpressionId _ (Id name)        -> buildString [setup, push offset]
-          where (setup, offset) = calculateOffset scope name
-        ExpressionTrue _                -> push "$1"
-        ExpressionFalse _               -> push "$0"
-        ExpressionNoop                  -> ""
-        ExpressionNeg _ expr1           -> buildString [doE expr1,
-                                            pop "eax",
-                                            "\tnegl %eax",
-                                            push "%eax"
-                                          ]
-        ExpressionPos _ _               -> "" -- essentially a no-op
+    "#E\n" ++
+    (case expr of
+      ExpressionInt _ i               -> push ('$' : show i)
+      ExpressionId _ (Id name)        -> buildString [setup, push offset]
+        where (setup, offset) = calculateOffset scope name
+      ExpressionTrue _                -> push "$1"
+      ExpressionFalse _               -> push "$0"
+      ExpressionNoop                  -> ""
+      ExpressionNeg _ expr1           -> buildString [doE expr1,
+                                          pop "eax",
+                                          "\tnegl %eax",
+                                          push "%eax"
+                                        ]
+      ExpressionPos _ _               -> "" -- essentially a no-op
 
-        -- Basic Arithmetic
-        ExpressionMul _ expr1 expr2     -> arithmetic doE expr1 expr2 "imull"
-        ExpressionDiv _ expr1 expr2     -> arithmetic doE expr1 expr2 "idivl"
-        ExpressionAdd _ expr1 expr2     -> arithmetic doE expr1 expr2 "addl"
-        ExpressionSub _ expr1 expr2     -> arithmetic doE expr1 expr2 "subl"
+      -- Basic Arithmetic
+      ExpressionMul _ expr1 expr2     -> arithmetic doE expr1 expr2 "imull"
+      ExpressionDiv _ expr1 expr2     -> arithmetic doE expr1 expr2 "idivl"
+      ExpressionAdd _ expr1 expr2     -> arithmetic doE expr1 expr2 "addl"
+      ExpressionSub _ expr1 expr2     -> arithmetic doE expr1 expr2 "subl"
 
-        -- Boolean Operators
-        ExpressionAnd _ expr1 expr2     -> arithmetic doE expr1 expr2 "andl"
-        ExpressionOr _ expr1 expr2      -> arithmetic doE expr1 expr2 "orl"
-        ExpressionNot _ expr1           -> buildString [
-                                            doE expr1,
-                                            pop "eax",
-                                            "\txorl $1, %eax",
-                                            push "%eax"
-                                          ]
+      -- Boolean Operators
+      ExpressionAnd _ expr1 expr2     -> arithmetic doE expr1 expr2 "andl"
+      ExpressionOr _ expr1 expr2      -> arithmetic doE expr1 expr2 "orl"
+      ExpressionNot _ expr1           -> buildString [
+                                          doE expr1,
+                                          pop "eax",
+                                          "\txorl $1, %eax",
+                                          push "%eax"
+                                        ]
 
-        -- Comparison Operators
-        ExpressionEq tk expr1 expr2     -> cmp doE scope tk expr1 expr2 "eq"
-        ExpressionGt tk expr1 expr2     -> cmp doE scope tk expr1 expr2 "gt"
-        ExpressionGtEq tk expr1 expr2   -> cmp doE scope tk expr1 expr2 "gteq"
+      -- Comparison Operators
+      ExpressionEq tk expr1 expr2     -> doCompare tk "eq" expr1 expr2
+      ExpressionGt tk expr1 expr2     -> doCompare tk "gt" expr1 expr2
+      ExpressionGtEq tk expr1 expr2   -> doCompare tk "gteq" expr1 expr2
 
-        -- Method Call
-        ExpressionCall tk scopeExpr (Id name) args -> buildString [
-          drop 4 $ doCallStmt (st, c, m, False) tk (scopeExpr, expr') name (args, args'),
-          push "%eax\n" -- save return value (it's in eax)
+      -- Method Call
+      ExpressionCall tk scopeExpr (Id name) args -> buildString [
+        drop 4 $ doCallStmt (st, c, m, False) tk (scopeExpr, expr') name (args, args'),
+        push "%eax\n" -- save return value (it's in eax)
+        ]
+        where (st, c, m, _) = scope
+              expr' = walkExpression scope scopeExpr
+              args' = reduceMap (walkExpression scope) args
+
+      -- Objects
+      ExpressionMe _                  -> push "8(%ebp)"
+      ExpressionNew tk (TypeId (Id cls')) ->
+        buildString [
+          "\t# Allocate space for a new " ++ cls',
+
+          -- calloc arguments
+          -- # of object variables plus two reserved spots
+          push "$" ++ show ((length vars + 2) * 4),
+          push "$1",
+
+          "\tcall calloc",
+          "\tincl (GLOBAL_OODLE_OBJECT_COUNT)",
+
+          -- cleanup after calloc
+          "\taddl $8, %esp",
+
+          -- push the pointer
+          push "%eax"
           ]
-          where (st, c, m, _) = scope
-                expr' = walkExpression scope scopeExpr
-                args' = reduceMap (walkExpression scope) args
+        where (st, _, _, _) = scope
+              (Ok cls) = findSymbol st (cls', tk)
+              vars = getVariables cls
+      ExpressionNull _                -> push "$0"
 
-        -- Objects
-        ExpressionMe _                  -> push "8(%ebp)"
-        ExpressionNew tk (TypeId (Id cls')) ->
-          buildString [
-            "\t# Allocate space for a new " ++ cls',
+      -- Strings
+      ExpressionStr tk string         -> buildString [
+          ".data",
+          label ++ ":",
+          ".string \"" ++ string ++ "\"",
+          ".text",
+          push "$" ++ label,
+          "\tcall string_fromlit", -- string_fromlit is in stdlib.c
+          "\taddl $4, %esp",
+          push "%eax"
+        ]
+        where label = buildLabelTag scope tk
 
-            -- calloc arguments
-            -- # of object variables plus two reserved spots
-            push "$" ++ show ((length vars + 2) * 4),
-            push "$1",
+      ExpressionStrCat tk expr1 expr2 -> doStringOp tk "cat" expr1 expr2
 
-            "\tcall calloc",
-            "\tincl (GLOBAL_OODLE_OBJECT_COUNT)",
+      {- THESE ARE UNSUPPORTED FEATURES
 
-            -- cleanup after calloc
-            "\taddl $8, %esp",
+      ExpressionIdArray _ i           -> getVarType m cls i
+      -}
+      _                               -> "# TODO"
+      )
+      where doE = doExpression scope
 
-            -- push the pointer
-            push "%eax"
-            ]
-          where (st, _, _, _) = scope
-                (Ok cls) = findSymbol st (cls', tk)
-                vars = getVariables cls
-        ExpressionNull _                -> push "$0"
-        ExpressionStr tk string         -> buildString [
-            ".data",
-            label ++ ":",
-            ".string \"" ++ string ++ "\"",
-            ".text",
-            push "$" ++ label,
-            "\tcall string_fromlit", -- string_fromlit is in stdlib.c
-            "\taddl $4, %esp",
-            push "%eax"
-          ]
-          where label = buildLabelTag scope tk
+            doCompare :: Token -> String -> Expression -> Expression -> String
+            doCompare tk op expr1 expr2 =
+              if t == typeString then
+                doStringOp tk op expr1 expr2
+              else
+                cmp doE scope tk expr1 expr2 op
+              where t = deE (typeOfExpression scope expr1)
 
-        {- THESE ARE UNSUPPORTED FEATURES
+            doStringOp :: Token -> String -> Expression -> Expression -> String
+            doStringOp tk op str1 str2 = buildString [
+                doE str2,
+                -- check for null string pointer
+                nullPointerTest tk,
 
-        ExpressionStrCat _ expr1 expr2  -> checkBothTypeE' expr1 expr2 TypeString
+                doE str1,
+                -- check for null string pointer
+                nullPointerTest tk,
 
-        ExpressionIdArray _ i           -> getVarType m cls i
-        -}
-        _                               -> "# TODO"
-        )
+                "\tcall String_" ++ op,
+                "\taddl $8, %esp",
+                push "%eax"
+              ]
 
   doAssignStmt scope tk name (_, expr)  = buildString [
     "#AS",

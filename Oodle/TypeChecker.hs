@@ -93,54 +93,57 @@ instance Walkable (Error Type) where
     actualP <- mapM (doExpression scope) args
     methodCall scope tk callScope name actualP True
 
-  doExpression scope e =
-    case e of
-      ExpressionInt _ _               -> return TypeInt
-      ExpressionId _ i                -> getVarType scope i
-      ExpressionStr _ _               -> return typeString
-      ExpressionTrue _                -> return TypeBoolean
-      ExpressionFalse _               -> return TypeBoolean
-      ExpressionMe _                  -> return $ TypeId (Id className)
-        where (_, c, _, _)  = scope
-              className     = symbol c
-      ExpressionNew _ t               -> return t
-      ExpressionNull _                -> yay
-      ExpressionNoop                  -> return TypeNoop
+  doExpression = typeOfExpression
 
-      ExpressionCall tk callScope (Id name) args -> do
-        actualP <- mapM (doExpression scope) args
-        methodCall scope tk callScope name actualP False
+typeOfExpression :: Scope -> Expression -> Error Type
+typeOfExpression scope e =
+  case e of
+    ExpressionInt _ _               -> return TypeInt
+    ExpressionId _ i                -> getVarType scope i
+    ExpressionStr _ _               -> return typeString
+    ExpressionTrue _                -> return TypeBoolean
+    ExpressionFalse _               -> return TypeBoolean
+    ExpressionMe _                  -> return $ TypeId (Id className)
+      where (_, c, _, _)  = scope
+            className     = symbol c
+    ExpressionNew _ t               -> return t
+    ExpressionNull _                -> yay
+    ExpressionNoop                  -> return TypeNoop
 
-      -- TODO: Arrays
-      ExpressionCall tk callScope (IdArray name _) args -> do
-        actualP <- mapM (doExpression scope) args
-        methodCall scope tk callScope name actualP False
+    ExpressionCall tk callScope (Id name) args -> do
+      actualP <- mapM (doExpression scope) args
+      methodCall scope tk callScope name actualP False
 
-      ExpressionIdArray _ i           -> getVarType scope i
-      ExpressionNeg _ expr            -> checkTypeE' expr TypeInt
-      ExpressionPos _ expr            -> checkTypeE' expr TypeInt
-      ExpressionMul _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
-      ExpressionDiv _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
-      ExpressionAdd _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
-      ExpressionSub _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
-      ExpressionStrCat _ expr1 expr2  -> checkBothTypeE' expr1 expr2 typeString
+    -- TODO: Arrays
+    ExpressionCall tk callScope (IdArray name _) args -> do
+      actualP <- mapM (doExpression scope) args
+      methodCall scope tk callScope name actualP False
 
-      ExpressionEq _ expr1 expr2      ->
-        checkTypeArray expr1 expr2 [typeString, TypeInt, TypeBoolean] >>
-          return TypeBoolean
-      ExpressionGt _ expr1 expr2      ->
-        checkTypeArray expr1 expr2 [typeString, TypeInt] >> return TypeBoolean
-      ExpressionGtEq _ expr1 expr2    ->
-        checkTypeArray expr1 expr2 [typeString, TypeInt] >> return TypeBoolean
+    ExpressionIdArray _ i           -> getVarType scope i
+    ExpressionNeg _ expr            -> checkTypeE' expr TypeInt
+    ExpressionPos _ expr            -> checkTypeE' expr TypeInt
+    ExpressionMul _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
+    ExpressionDiv _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
+    ExpressionAdd _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
+    ExpressionSub _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
+    ExpressionStrCat _ expr1 expr2  -> checkBothTypeE' expr1 expr2 typeString
 
-      ExpressionAnd _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeBoolean
-      ExpressionOr _ expr1 expr2      -> checkBothTypeE' expr1 expr2 TypeBoolean
-      ExpressionNot _ expr            -> checkTypeE' expr TypeBoolean
-    where
-      checkTypeE'         = checkTypeE scope
-      checkBothTypeE'     = checkBothTypeE scope
-      checkBothTypeMulE'  = checkBothTypeMulE scope
-      checkTypeArray e1 e2 types = checkBothTypeMulE' e1 e2 types
+    ExpressionEq _ expr1 expr2      ->
+      checkTypeArray expr1 expr2 [typeString, TypeInt, TypeBoolean] >>
+        return TypeBoolean
+    ExpressionGt _ expr1 expr2      ->
+      checkTypeArray expr1 expr2 [typeString, TypeInt] >> return TypeBoolean
+    ExpressionGtEq _ expr1 expr2    ->
+      checkTypeArray expr1 expr2 [typeString, TypeInt] >> return TypeBoolean
+
+    ExpressionAnd _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeBoolean
+    ExpressionOr _ expr1 expr2      -> checkBothTypeE' expr1 expr2 TypeBoolean
+    ExpressionNot _ expr            -> checkTypeE' expr TypeBoolean
+  where
+    checkTypeE'         = checkTypeE scope
+    checkBothTypeE'     = checkBothTypeE scope
+    checkBothTypeMulE'  = checkBothTypeMulE scope
+    checkTypeArray e1 e2 types = checkBothTypeMulE' e1 e2 types
 
 methodCall :: Scope -> Token -> Expression -> String -> [Type] -> Bool -> Error Type
 methodCall scope tk callScope name actualP returnNull = do
