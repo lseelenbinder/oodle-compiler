@@ -2,7 +2,7 @@
 
 module Oodle.UnsupportedFeatures (unsupportedFeatures) where
 
-import Oodle.Error (msgWithToken, msgWithToken')
+import Oodle.Error (msgWithToken)
 import Oodle.ParseTree
 import Oodle.TreeWalker
 import Oodle.SymbolTable (SymbolTable, buildType)
@@ -19,24 +19,15 @@ instance Walkable [String] where
 
   doMethod _ _ _ _ _ _ _ = []
 
-  doArgumentArr _ tk name _ typ =
-      [msgWithToken tk "array indexing" name,
-        if t == TypeString then
-          msgWithToken tk "string type argument" name
-        else ""
-      ]
-    where t = buildType typ
+  doArgumentArr _ tk name _ _ =
+      [msgWithToken tk "array indexing" name]
 
-  doArgument _ tk name typ
-    | t == TypeString         = [msgWithToken tk "string type argument" name]
-    | otherwise               = []
-    where t = buildType typ
+  doArgument _ _ _ _ = []
 
   doVariable _ tk name typ (expr, _)
     | expr /= ExpressionNoop  =
       [msgWithToken tk "variable with assignment" name]
     | isArrayType t           = [msgWithToken tk "array type variable" name]
-    | t == TypeString         = [msgWithToken tk "string type variable" name]
     | otherwise               = []
     where t = buildType typ
 
@@ -47,8 +38,4 @@ instance Walkable [String] where
   doIfStmt   _ _ _ _ _  = []
   doLoopStmt _ _ _ _    = []
   doCallStmt _ _ _ _ _  = []
-
-  doExpression _ expr =
-    case expr of
-      ExpressionStr   tk _  -> [msgWithToken' tk "string literal"]
-      _                     -> []
+  doExpression _ _ = []

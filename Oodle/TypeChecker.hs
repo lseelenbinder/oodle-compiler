@@ -24,7 +24,7 @@ import Oodle.Token (Token, fakeToken)
 --
 
 yay :: Error Type
-yay = return TypeNull
+yay = return typeNull
 
 typeChecker :: SymbolTable -> Start -> Error Type
 typeChecker st = walk (st, (head st), (head st), False)
@@ -41,7 +41,7 @@ instance Walkable (Error Type) where
   doArgumentArr _ _ _ _ _ = yay
   doVariable _ tk name t (_, exprT') = do
     exprT <- exprT'
-    if (t == exprT) || (t == TypeNull) || (exprT == TypeNoop) then
+    if (t == exprT) || (t == typeNull) || (exprT == TypeNoop) then
       yay
     else
       fail (msgWithToken tk (wrongTypeMsg t exprT) name)
@@ -65,7 +65,7 @@ instance Walkable (Error Type) where
       yay
     else
       case t of
-        TypeId _  -> if exprT == TypeNull then yay
+        TypeId _  -> if exprT == typeNull then yay
                       else failMe
         _         -> failMe
 
@@ -87,7 +87,7 @@ instance Walkable (Error Type) where
     case e of
       ExpressionInt _ _               -> return TypeInt
       ExpressionId _ i                -> getVarType scope i
-      ExpressionStr _ _               -> return TypeString
+      ExpressionStr _ _               -> return typeString
       ExpressionTrue _                -> return TypeBoolean
       ExpressionFalse _               -> return TypeBoolean
       ExpressionMe _                  -> return $ TypeId (Id className)
@@ -113,14 +113,16 @@ instance Walkable (Error Type) where
       ExpressionDiv _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
       ExpressionAdd _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
       ExpressionSub _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeInt
-      ExpressionStrCat _ expr1 expr2  -> checkBothTypeE' expr1 expr2 TypeString
+      ExpressionStrCat _ expr1 expr2  -> checkBothTypeE' expr1 expr2 typeString
+
       ExpressionEq _ expr1 expr2      ->
-        checkTypeArray expr1 expr2 [TypeString, TypeInt, TypeBoolean] >>
+        checkTypeArray expr1 expr2 [typeString, TypeInt, TypeBoolean] >>
           return TypeBoolean
       ExpressionGt _ expr1 expr2      ->
-        checkTypeArray expr1 expr2 [TypeString, TypeInt] >> return TypeBoolean
+        checkTypeArray expr1 expr2 [typeString, TypeInt] >> return TypeBoolean
       ExpressionGtEq _ expr1 expr2    ->
-        checkTypeArray expr1 expr2 [TypeString, TypeInt] >> return TypeBoolean
+        checkTypeArray expr1 expr2 [typeString, TypeInt] >> return TypeBoolean
+
       ExpressionAnd _ expr1 expr2     -> checkBothTypeE' expr1 expr2 TypeBoolean
       ExpressionOr _ expr1 expr2      -> checkBothTypeE' expr1 expr2 TypeBoolean
       ExpressionNot _ expr            -> checkTypeE' expr TypeBoolean
@@ -138,7 +140,7 @@ methodCall scope tk callScope name actualP returnNull = do
 
   if length actualP == length formalP then
     if actualP == formalP then return
-      (if returnNull then TypeNull else (Oodle.SymbolTable.getType method))
+      (if returnNull then typeNull else (Oodle.SymbolTable.getType method))
     else
     fail (msgWithToken tk ("actual parameters do not match formal parameters ("
       ++ show actualP ++ " !=  "++ show formalP) name)

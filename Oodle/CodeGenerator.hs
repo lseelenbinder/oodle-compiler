@@ -16,7 +16,6 @@ import Oodle.SymbolTable (
   isClassDecl,
   getMethods,
   getVariables,
-  getMethodDecl,
   resolveScope,
   Scope
   )
@@ -39,17 +38,35 @@ codeGenerator st debug start = buildString [
   else "",
   "STDOUT = 1",
   "STDIN = 0",
-  "",
+
   ".data",
   "\t.comm GLOBAL_OODLE_OBJECT_COUNT, 4, 4",
+  "\t.comm in, 4, 4",
+  "\t.comm out, 4, 4",
   ".text",
+
   ".global main",
   "main:",
   -- setup Main object
   push "$" ++ show ((length (getVariables entry) + 2) * 4),
   push "$1",
   "\tcall calloc",
+  "\taddl $8, %esp",
   push "%eax",
+
+  -- setup Reader object
+  push "$" ++ show ((length (getVariables reader) + 2) * 4),
+  push "$1",
+  "\tcall calloc",
+  "\taddl $8, %esp",
+  "\tmovl %eax, (in)",
+
+  -- setup Writer object
+  push "$" ++ show ((length (getVariables writer) + 2) * 4),
+  push "$1",
+  "\tcall calloc",
+  "\taddl $8, %esp",
+  "\tmovl %eax, (out)",
 
   "\tcall " ++ (symbol entry) ++ "_start",
   push "$0",
@@ -61,6 +78,8 @@ codeGenerator st debug start = buildString [
         (ClassDecl tk _ _) = decl (st !! 4)
         filename = (getFilePath (getPosition tk))
         scope = (st, (head st), (head st), debug)
+        reader = deE $ findSymbol st ("Reader", tk)
+        writer = deE $ findSymbol st ("Writer", tk)
 
 getEntryPoint :: SymbolTable -> Symbol
 getEntryPoint st =
@@ -144,15 +163,11 @@ instance Walkable String where
     "\tcall nullpointertest",
     "\taddl $4, %esp",
 
-    if name == "writeint" || name == "readint" then
-      "\tcall " ++ name
-    else
-      "\tcall " ++ className ++ "_" ++ name,
+    "\tcall " ++ className ++ "_" ++ name,
     "\taddl $" ++ (show ((length args + 1) * 4)) ++ ", %esp" -- get rid of arguments & me (+1)
     ]
     where
       classDecl = deE $ resolveScope scope callScope'
-      method    = deE $ getMethodDecl classDecl (name, tk)
       (st, _, _, _) = scope
       className = symbol (deE $ findDecl st (classDecl, tk))
 
@@ -175,12 +190,7 @@ instance Walkable String where
       "#E\n" ++
       (case expr of
         ExpressionInt _ i               -> push ('$' : show i)
-        ExpressionId _ (Id name)        ->
-          if name == "out" || name == "in" then ""
-          else buildString [
-              setup,
-              push offset
-            ]
+        ExpressionId _ (Id name)        -> buildString [setup, push offset]
           where (setup, offset) = calculateOffset scope name
         ExpressionTrue _                -> push "$1"
         ExpressionFalse _               -> push "$0"
@@ -312,6 +322,8 @@ buildString = intercalate "\n" . filter (/= "")
 --                                     setup   offset
 calculateOffset :: Scope -> String -> (String, String)
 calculateOffset (st, c, m, d) name
+  | name == "in" || name == "out" =
+    ("", "(" ++ name ++ ")")
   -- Need to check if it is a local, a parameter, or a class var
   -- it is a local or a parameter
   | inM =
@@ -345,11 +357,7 @@ calculateLocalOffset (_, _, m, _) name
         (MethodDecl _ _ nParams _ _) = decl m
 
 varAssembly :: Scope -> String -> String
-varAssembly (_, c, _, _) var =
-  (if var == "readint" || var == "writeint" then ""
-  else
-    (symbol c) ++ "_") ++ var
-
+varAssembly (_, c, _, _) var = (symbol c) ++ "_" ++ var
 
 arithmetic :: (Expression -> String) -> Expression -> Expression -> String -> String
 arithmetic f expr1 expr2 op =
@@ -414,4 +422,4 @@ debugStatement (st, c, m, d) tk =
 
 buildLabelTag :: Scope -> Token -> String
 buildLabelTag (_, _, m, _) tk =
-  symbol m ++ "_" ++ show (getLineNo (getPosition tk))
+  symbol m ++ "_" ++ show (getLineNo (getPosition tk)) ++ show (getCol (getPosition tk))

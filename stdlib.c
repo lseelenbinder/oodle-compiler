@@ -1,6 +1,61 @@
-#include <syscall.h>
-#define NULL 0
+// ----------------------------------------------------------------------
+// File: stdlib.c
+// Runtime support library for Oodle
+// ----------------------------------------------------------------------
 
+#include <stdlib.h>
+#include "stdlib.h"
+#include <syscall.h>
+
+// ----------------------------------------------------------------------
+// I/O Management Functions
+// ----------------------------------------------------------------------
+
+// writes <ch> to standard output (<out> is the predefined Oodle Writer object)
+void Writer_io_write(void *out, int ch) {
+  char c = ch;
+
+  write(1, &c, 1);
+}
+
+// reads a character from stdin and returns it (<in> is the predefined Oodle Reader object)
+int Reader_io_read(void *in) {
+  char c;
+
+  read(0, &c, 1);
+
+  return c;
+}
+
+// ----------------------------------------------------------------------
+// String Management Functions
+// ----------------------------------------------------------------------
+
+// Constructs and returns an Oodle String using chars in <lit>, which must be null terminated
+struct String *string_fromlit(char *lit)
+{
+  struct String *newstr = (struct String *)calloc(sizeof(struct String), 1);
+  struct CharNode *cur = NULL;
+  while (*lit) {
+    struct CharNode *node = (struct CharNode *)calloc(sizeof(struct CharNode), 1);
+    node->ch = *lit;
+    if (cur == NULL) {
+      newstr->list = node;
+    } else {
+      cur->next = node;
+    }
+    cur = node;
+    lit++;
+  }
+  return newstr;
+}
+
+// ---------------------------------------------------------------------
+// Null Pointer Test
+// ---------------------------------------------------------------------
+
+
+// only used for nullpointertest
 void writeint(int num) {
   char buf[20];
   char result[20] = "0\n";
@@ -39,50 +94,9 @@ void writeint(int num) {
 
 }
 
-int power(int n, int p) {
-  int i = 0, sum = 1;
-  for (i; i < p; ++i) sum *= n;
-  return sum;
-}
-
-int readint() {
-  char buf[20];
-  int i, sum;
-  char *end;
-  char *pos = buf;
-  int neg = 0;
-
-  for (i = 0; i < 20; i++) buf[i] = 0;
-
-  read(0, buf, 19);
-
-  for (i = 0; i < 20; i++) {
-    if (buf[i] == 10) {
-      end = &buf[i-1];
-    }
-  }
-
-  if (buf[0] == '-') {
-    neg = 1;
-    ++pos;
-  }
-
-  sum = 0;
-  i = end - pos;
-  while (pos <= end) {
-    sum += (0x30 ^ *pos) * power(10, i);
-    ++pos;
-    --i;
-  }
-
-  if (neg) sum = -sum;
-
-  return sum;
-}
-
 void nullpointertest(int lineno, void* ptr) {
   if (ptr == NULL) {
-    char msg[] = "Runtime errory: null pointer exception on line \0";
+    char msg[] = "Runtime error: null pointer exception on line \0";
     write(1, msg, sizeof(msg)-1);
     writeint(lineno);
     exit(0);

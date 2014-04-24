@@ -10,11 +10,8 @@ import Oodle.TreeWalker
 getSymbolTable :: SymbolTable
 getSymbolTable =
   [
-  -- global Reader
-  Symbol "Reader" (ClassDecl fakeToken [] [Symbol "readint" (MethodDecl fakeToken TypeInt 0 [] [])]),
+  -- global Reader & Writer
   Symbol "in" (VarDecl fakeToken (TypeId (Id "Reader"))),
-  -- global Writer
-  Symbol "Writer" (ClassDecl fakeToken [] [Symbol "writeint" (MethodDecl fakeToken TypeNull 1 [TypeInt] [])]),
   Symbol "out" (VarDecl fakeToken (TypeId (Id "Writer")))
   ]
 
@@ -58,7 +55,15 @@ instance Walkable (Error SymbolTable) where
   doClass _ tk name _ (_, vars) (_, methods) = do
     vars' <- vars
     methods' <- methods
-    return [pushClass tk name vars' methods']
+    let methods'' =
+                    case name of
+                      "Reader"  -> pushMethod fakeToken "io_read" TypeInt 0 [] []
+                                  : methods'
+                      "Writer"  ->
+                        pushMethod fakeToken "io_write" typeNull 1 [pushVar fakeToken "" TypeInt] []
+                        : methods'
+                      _         -> methods'
+    return [pushClass tk name vars' methods'']
 
   doMethod _ tk name typ (_, args) (_, vars) _ = do
     args' <- args

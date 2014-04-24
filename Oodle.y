@@ -127,7 +127,7 @@ VarDecl       : Id TypeExpression NullableInit cr
 
 TypeExpression
               : ':' Type                        { $$ = $2 }
-              | {- empty -}                     { $$ = TypeNull }
+              | {- empty -}                     { $$ = typeNull }
 NullableInit  :
               InitExpression                    { $$ = $1 }
               | {- empty -}                     { $$ = ExpressionNoop }
@@ -202,7 +202,7 @@ ArrayIndexOptExpr
 
 -- Type
 Type          : int                             { $$ = TypeInt }
-              | string                          { $$ = TypeString }
+              | string                          { $$ = typeString }
               | boolean                         { $$ = TypeBoolean }
               | Id                              { $$ = TypeId $1 }
               | Type ArrayIndexOptExpr          { $$ = TypeExp $1 $2 }

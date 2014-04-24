@@ -115,12 +115,12 @@ main = do
     -- Handle Options
     args <- getArgs
     prg <- getProgName
-    let (actions, nonOptions, _) = getOpt RequireOrder options args
+    let (actions, inputFiles, _) = getOpt RequireOrder options args
     opts <- foldl (>>=) (return startOptions) actions
     let Options { optVerbose = verbose, optLexer = lexerOnly,
                   optAssembly = assemblyOnly, optDebug = debug } = opts
 
-    if null nonOptions
+    if null inputFiles
     then
       do
         hPutStrLn stderr "FATAL ERROR: no input file(s)"
@@ -129,14 +129,14 @@ main = do
     else
       do
         -- Lex the input files
-        tokenStream <- buildTokenStream nonOptions
+        tokenStream <- buildTokenStream ("stdlib.ood" : inputFiles)
         let errorCount = countErrorTokens tokenStream
         when (errorCount > 0) $
           hPutStrLn stderr $ printTokenStream verbose tokenStream
 
         when (verbose || lexerOnly ) $
           hPutStrLn stderr $ show (length tokenStream) ++ " Token(s) found across " ++
-            show (length nonOptions) ++ " file(s)."
+            show (length inputFiles) ++ " file(s)."
 
         when lexerOnly $
           exitWith (if errorCount == 0 then ExitFailure 1 else ExitSuccess)
@@ -164,8 +164,8 @@ main = do
           exitWith $ ExitFailure 1
 
         let symbolTable' = deE symbolTable
-        when ((length symbolTable' - 4) > length nonOptions) $
-          hPutStrLn stderr "Error: more than one class per file"
+        when ((length symbolTable' - 4) > length inputFiles - 1) $
+          hPutStrLn stderr "Warning: more than one class per file"
 
         -- Unsupported Features
         let unsupportedFeatures' = unsupportedFeatures symbolTable' parseTree'
@@ -190,7 +190,7 @@ main = do
 
         -- Code Generation
         let assembly = codeGenerator symbolTable' debug parseTree'
-        let outName = init (dropWhileEnd (/= '.') (last nonOptions))
+        let outName = init (dropWhileEnd (/= '.') (last inputFiles))
 
         if assemblyOnly then do
           out <- openFile (outName ++ ".s") WriteMode
@@ -200,7 +200,7 @@ main = do
           tmp <- openFile "/tmp/file.s" WriteMode
           hPutStrLn tmp assembly
           hClose tmp
-          readProcess "gcc" [
+          _ <- readProcess "gcc" [
               "-o" ++ outName,
               "stdlib.o",
               "/tmp/file.s"

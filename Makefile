@@ -5,7 +5,7 @@ Oodle/Parser.hs: Oodle.y
 	~/.cabal/bin/happy -gac -o Oodle/Parser.hs --magic=oodle Oodle.y
 
 stdlib.o: stdlib.c
-	gcc -c stdlib.c
+	gcc -ostdlib.o -c stdlib.c
 
 test:
 	@echo "Testing Oodle Compiler...\n(an empty diff is a passing test)\n\n"
