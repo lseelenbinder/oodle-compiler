@@ -159,10 +159,8 @@ instance Walkable String where
         push "8(%ebp)"
       _ -> callScope,
 
-    -- check for NULL pointer
-    push "$" ++ show (getLineNo (getPosition tk)),
-    "\tcall nullpointertest",
-    "\taddl $4, %esp",
+    -- check for null pointer
+    nullPointerTest tk,
 
     "\tcall " ++ className ++ "_" ++ name,
     "\taddl $" ++ (show ((length args + 1) * 4)) ++ ", %esp" -- get rid of arguments & me (+1)
@@ -421,6 +419,14 @@ pop = (++) "\tpopl %"
 
 comment :: Token -> String -> String
 comment tk typ = "# {{ " ++ typ ++ " }} " ++ printToken tk
+
+nullPointerTest :: Token -> String
+nullPointerTest tk = buildString [
+    push "$" ++ show (getLineNo (getPosition tk)),
+    "\tcall nullpointertest",
+    "\taddl $4, %esp"
+  ]
+
 
 debugStatement :: Scope -> Token -> String
 debugStatement (st, c, m, d) tk =
