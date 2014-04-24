@@ -128,8 +128,8 @@ instance Walkable String where
     push "%ebp",
     "\tmovl %esp, %ebp",
 
-    -- reserve space for locals and return address (+1)
-    "\tsubl $" ++ (show (((length vars) + 1) * 4)) ++ ", %esp",
+    -- reserve space for locals and return value (+1)
+    buildString (take nLocals (repeat "\tpushl $0")),
 
     -- do the actual work
     stmts,
@@ -146,6 +146,7 @@ instance Walkable String where
     where
       (_, _, _, d)  = scope
       name'         = varAssembly scope name
+      nLocals       = length vars + 1
 
   doCallStmt scope tk (callScope', callScope) name (args, args') = buildString [
     "#CS",
