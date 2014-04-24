@@ -22,7 +22,7 @@ test:
 	@echo "********************"
 
 install_build_tools:
-	sudo apt-get install ghc6 cabal-install
+	sudo apt-get install ghc cabal-install
 	cabal update
 	cabal install happy
 	cabal install split
