@@ -1,11 +1,12 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module Oodle.TypeChecker (typeChecker) where
+module Oodle.TypeChecker (typeChecker, typeOfExpression) where
 
 import Oodle.Error
 import Oodle.ParseTree
 import Oodle.SymbolTable (
   SymbolTable
+  , findSymbol
   , resolveScope
   , getMethodDecl
   , getNamedDecl
@@ -39,12 +40,21 @@ instance Walkable (Error Type) where
   doMethod  _ _ _ _ _ _ _ = yay
   doArgument      _ _ _ _ = yay
   doArgumentArr _ _ _ _ _ = yay
-  doVariable _ tk name t (_, exprT') = do
+  doVariable (st, _, _, _) tk name t (_, exprT') = do
     exprT <- exprT'
-    if (t == exprT) || (t == typeNull) || (exprT == TypeNoop) then
+    tExists <- tExists'
+    if tExists && (t == exprT) || (exprT == typeNull) || (exprT == TypeNoop) then
       yay
     else
       fail (msgWithToken tk (wrongTypeMsg t exprT) name)
+    where tExists' = case t of
+                      (TypeId (Id typeName)) ->
+                        case findSymbol st (typeName, tk) of
+                          Ok _ -> return True
+                          Failed _ ->
+                            fail $ msgWithToken tk "undefined class" typeName
+                      TypeNoop        -> return False
+                      _               -> return True
 
   doAssignStmtArr scope tk name (arrayScope, arrayScope') (_, exprT') = do
     t <- getVarType scope (IdArray name arrayScope)
