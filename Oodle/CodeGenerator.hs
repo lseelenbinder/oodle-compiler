@@ -102,15 +102,16 @@ instance Walkable String where
   reduce strings =
     case nodeType of
       "#C"  -> buildString (nodeRest : tail strings)
+      "#V"  -> nodeRest
       "#M"  -> nodeRest
       "#E"  -> nodeRest
       "#A"  -> nodeRest
-      "#V"  -> buildString (nodeRest : tail strings)
       "#AS" -> nodeRest
       "#IS" -> nodeRest
       "#CS" -> nodeRest
       "#LS" -> nodeRest
-      _     -> buildString (nodeRest : tail strings)
+      ""    -> buildString (nodeRest : tail strings)
+      _     -> error $ show strings
     where (nodeType, nodeRest) = span (/= '\n') (head strings)
 
   doClass _ _ _ _ _ _ = "#C\n"
@@ -171,17 +172,7 @@ instance Walkable String where
       (st, _, _, _) = scope
       className = symbol (deE $ findDecl st (classDecl, tk))
 
-  doVariable scope _ name _ _ = "" {- buildString [
-    "#V",
-    ".data",
-    -- TODO: DEBUG for stack variables
-    if d then ".stabs  \"" ++ var ++ ":g(0,1)\",32,0,0,0" else "",
-    "\t.comm " ++ var ++ ", 4, 4"
-    ]
-    where
-      (_, _, _, d)  = scope
-      var           = varAssembly scope name
-    -}
+  doVariable _ _ _ _ _ = "#V\n"
 
   doExpression scope expr =
     "#E\n" ++
@@ -270,7 +261,6 @@ instance Walkable String where
       ExpressionStrCat tk expr1 expr2 -> doStringOp tk "cat" expr1 expr2
 
       {- THESE ARE UNSUPPORTED FEATURES
-
       ExpressionIdArray _ i           -> getVarType m cls i
       -}
       _                               -> "# TODO"
@@ -423,7 +413,9 @@ cmp f scope tk expr1 expr2 op =
     "\tj" ++ (case op of
                 "eq" -> "e"
                 "gt" -> "g"
-                "gteq" -> "ge")
+                "gteq" -> "ge"
+                _     -> error "Unsupported comparison"
+                )
           ++ " " ++ (init noDone),
     push "$0",
     "\tjmp " ++ (init yesDone),
