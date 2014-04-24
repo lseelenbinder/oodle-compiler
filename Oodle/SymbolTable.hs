@@ -92,8 +92,7 @@ findSymbol :: [Symbol] -> (String, Token) -> Error Symbol
 findSymbol symbols (sym, tk) =
   if not $ null match then return $ head match
   else
-    fail $ concatMap (\s -> show s ++ "\n") symbols ++
-      "\n" ++ (msgWithToken tk "undeclared variable/method" sym)
+    fail $ msgWithToken tk "undeclared variable/method" sym
   where match = dropWhile (\s -> symbol s /= sym) symbols
 
 -- Symbol must exist
