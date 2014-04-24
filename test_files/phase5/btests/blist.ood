@@ -186,29 +186,29 @@ class List is
   begin
     startLine := 187
     list := (new List).add(10).add(20).add(30)
-    
+
     assert(list.get(0) = 10, startLine + 3)
     assert(list.get(2) = 30, startLine + 4)
     assert(list.get(3) = -1, startLine + 5)
-    
+
     list.add(40)
     list.add(50)     ~ 10 20 30 40 50
     assert(list.get(4) = 50, startLine + 9)
-    
-    list.remove(2) 
+
+    list.remove(2)
     list.set(2, 5)  ~ 10 20 5 50
     assert(list.get(2) = 5, startLine + 13)
     assert(list.get(3) = 50, startLine + 14)
-    
+
     list.print() ~ 10 20 5 50
-    
+
     ~ uncomment the following lines to test toString()
-    
-    ~ assert((new List).toString().eq("[]"), startLine + 20)
-    ~ assert(list.toString().eq("[10,20,5,50]"), startLine + 21)
-    ~ out.writeln(list.toString())
-    ~ out.writeln((new List).toString())
-    
+
+    assert((new List).toString().eq("[]"), startLine + 20)
+    assert(list.toString().eq("[10,20,5,50]"), startLine + 21)
+    out.writeln(list.toString())
+    out.writeln((new List).toString())
+
   end start
-  
+
 end List

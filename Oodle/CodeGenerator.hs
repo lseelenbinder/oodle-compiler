@@ -257,10 +257,20 @@ instance Walkable String where
                 (Ok cls) = findSymbol st (cls', tk)
                 vars = getVariables cls
         ExpressionNull _                -> push "$0"
+        ExpressionStr tk string         -> buildString [
+            ".data",
+            label ++ ":",
+            ".string \"" ++ string ++ "\"",
+            ".text",
+            push "$" ++ label,
+            "\tcall string_fromlit", -- string_fromlit is in stdlib.c
+            "\taddl $4, %esp",
+            push "%eax"
+          ]
+          where label = buildLabelTag scope tk
 
         {- THESE ARE UNSUPPORTED FEATURES
 
-        ExpressionStr _ _               -> return TypeString
         ExpressionStrCat _ expr1 expr2  -> checkBothTypeE' expr1 expr2 TypeString
 
         ExpressionIdArray _ i           -> getVarType m cls i

@@ -106,7 +106,7 @@ findDecl symbols (d, tk) =
   where match = dropWhile (\s -> decl s /= d) symbols
 
 resolveScope :: Scope -> Expression -> Error Declaration
-resolveScope (st, cls, m, _) scope =
+resolveScope (st, cls, m, d) scope =
   case scope of
     ExpressionNoop            -> return (decl cls)
 
@@ -118,8 +118,19 @@ resolveScope (st, cls, m, _) scope =
 
     ExpressionNew tk (TypeId (Id name)) -> getNamedDecl st (name, tk)
 
+    ExpressionCall tk callScope (Id name) _ -> do
+      callScope' <- resolveScope (st, cls, m, d) callScope
+      (MethodDecl _ (TypeId (Id t)) _ _ _) <- getMethodDecl callScope' (name, tk)
+      getDeclFromType t
+
+    ExpressionStr _ _ ->
+      getDeclFromType "String"
+
     _ -> fail $
             msgWithToken' (getExprToken scope) "scope not a valid expression"
+    where
+      getDeclFromType t =
+        return (decl (deE (findSymbol st (t, fakeToken))))
 
 -- Handles building any kind of array type
 buildType :: Type -> Type
