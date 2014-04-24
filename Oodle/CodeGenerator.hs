@@ -26,7 +26,7 @@ import Oodle.Token (Token(..), TokenPosition(..), printToken, fakeToken)
 import Oodle.TreeWalker
 
 codeGenerator :: SymbolTable -> Bool -> Start -> String
-codeGenerator st debug start = buildString [
+codeGenerator st debug start = buildString $ lines $ buildString [
   if debug then
     concat [
       ".file   \"" ++ filename ++ "\"\n",
