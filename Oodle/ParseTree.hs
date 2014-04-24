@@ -50,7 +50,15 @@ data Type
       | TypeExp Type Expression
       | TypeArray Type
       | TypeNoop
-  deriving (Show)
+
+instance Show Type where
+  (show) TypeInt                = "Int"
+  (show) TypeBoolean            = "Boolean"
+  (show) (TypeId (Id t))        = t
+  (show) (TypeId (IdArray t _)) = t
+  (show) (TypeExp t _ )         = show t
+  (show) (TypeArray t)          = "[]" ++ show t
+  (show) TypeNoop               = "Noop"
 
 typeNull :: Type
 typeNull = TypeId (Id "null")
