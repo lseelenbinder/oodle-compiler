@@ -30,12 +30,12 @@ import Oodle.TreeWalker
 codeGenerator :: SymbolTable -> Bool -> Start -> String
 codeGenerator st debug start = buildString $ lines $ buildString [
   if debug then
-    concat [
-      ".file   \"" ++ filename ++ "\"\n",
-      "\t.stabs \"" ++ filename ++ "\",100,0,0,.ltext0\n",
-      "\t.text\n",
-      ".ltext0:\n",
-      "\t.stabs  \"int:t(0,1)=r(0,1);-2147483648;2147483647;\",128,0,0,0\n"
+    buildString [
+      ".file   \"" ++ filename ++ "\"",
+      "\t.stabs \"" ++ filename ++ "\",100,0,0,.ltext0",
+      "\t.text",
+      ".ltext0:",
+      "\t.stabs  \"int:t(0,1)=r(0,1);-2147483648;2147483647;\",128,0,0,0"
     ]
   else "",
   "STDOUT = 1",
@@ -49,25 +49,16 @@ codeGenerator st debug start = buildString $ lines $ buildString [
 
   ".global main",
   "main:",
-  -- setup Main object
-  push "$" ++ show ((length (getVariables entry) + 2) * 4),
-  push "$1",
-  "\tcall calloc",
-  "\taddl $8, %esp",
+  -- setup Main / entry object
+  setupObj entry,
   push "%eax",
 
   -- setup Reader object
-  push "$" ++ show ((length (getVariables reader) + 2) * 4),
-  push "$1",
-  "\tcall calloc",
-  "\taddl $8, %esp",
+  setupObj reader,
   "\tmovl %eax, (in)",
 
   -- setup Writer object
-  push "$" ++ show ((length (getVariables writer) + 2) * 4),
-  push "$1",
-  "\tcall calloc",
-  "\taddl $8, %esp",
+  setupObj writer,
   "\tmovl %eax, (out)",
 
   "\tcall " ++ (symbol entry) ++ "_start",
@@ -115,7 +106,7 @@ instance Walkable String where
       _     -> error $ show strings
     where (nodeType, nodeRest) = span (/= '\n') (head strings)
 
-  doClass scope tk name parentName _ _ = buildString [
+  doClass scope _ name parentName _ _ = buildString [
     "#C\n",
     (vft_label name) ++ ":",
     if parentName == "" && name /= "ood" then
@@ -181,6 +172,7 @@ instance Walkable String where
     -- check for null pointer
     nullPointerTest tk,
 
+    -- load function pointer and call it
     "\tleal " ++ vft_label className ++ ", %eax",
     "\tcall *" ++ show (4 * (nthFunction + 1)) ++ "(%eax)",
     "\taddl $" ++ (show ((length args + 1) * 4)) ++ ", %esp" -- get rid of arguments & me (+1)
@@ -206,7 +198,9 @@ instance Walkable String where
       ExpressionTrue _                -> push "$1"
       ExpressionFalse _               -> push "$0"
       ExpressionNoop                  -> ""
-      ExpressionNeg _ expr1           -> buildString [doE expr1,
+
+      ExpressionNeg _ expr1           -> buildString [
+                                          doE expr1,
                                           pop "eax",
                                           "\tnegl %eax",
                                           push "%eax"
@@ -247,28 +241,12 @@ instance Walkable String where
       ExpressionMe _                  -> push "8(%ebp)"
       ExpressionNew tk (TypeId (Id cls')) ->
         buildString [
-          "\t# Allocate space for a new " ++ cls',
-
-          -- calloc arguments
-          -- # of object variables plus two reserved spots
-          push "$" ++ show ((length vars + 2) * 4),
-          push "$1",
-
-          "\tcall calloc",
-          "\tincl (GLOBAL_OODLE_OBJECT_COUNT)",
-
-          -- cleanup after calloc
-          "\taddl $8, %esp",
-
-          -- save pointer to the VFT
-          "\tmovl $" ++ vft_label cls' ++ ", (%eax)",
-
+          setupObj cls,
           -- push the pointer
           push "%eax"
           ]
         where (st, _, _, _) = scope
               (Ok cls) = findSymbol st (cls', tk)
-              vars = getVariables cls
       ExpressionNull _                -> push "$0"
 
       -- Strings
@@ -291,15 +269,36 @@ instance Walkable String where
       -}
       _                               -> "# TODO"
       )
-      where doE = doExpression scope
+      where doE = walkExpression scope
 
             doCompare :: Token -> String -> Expression -> Expression -> String
             doCompare tk op expr1 expr2 =
               if t == typeString then
                 doStringOp tk op expr1 expr2
               else
-                cmp doE scope tk expr1 expr2 op
+                buildString [
+                  doE expr1,
+                  doE expr2,
+                  pop "ebx", -- Expression 2
+                  pop "eax", -- Expression 1
+                  "\tcmpl %ebx, %eax",
+                  "\tj" ++ (case op of
+                              "eq" -> "e"
+                              "gt" -> "g"
+                              "gteq" -> "ge"
+                              _     -> error "Unsupported comparison"
+                              )
+                        ++ " " ++ no,
+                  push "$0",
+                  "\tjmp " ++ yes,
+                  no ++ ":",
+                  push "$1",
+                  yes ++ ":"
+                ]
               where t = deE (typeOfExpression scope expr1)
+                    tag     = buildLabelTag scope tk
+                    yes     = "yes" ++ tag
+                    no      = "no" ++ tag
 
             doStringOp :: Token -> String -> Expression -> Expression -> String
             doStringOp tk op str1 str2 = buildString [
@@ -317,51 +316,52 @@ instance Walkable String where
               ]
 
   doAssignStmt scope tk name (_, expr)  = buildString [
-    "#AS",
-    comment tk "Assignment",
-    debugStatement scope tk,
-    expr,
-    pop "eax",
-    setup,
-    "\tmovl %eax, " ++ offset
+      "#AS",
+      comment tk "Assignment",
+      debugStatement scope tk,
+      expr,
+      pop "eax",
+      setup,
+      "\tmovl %eax, " ++ offset
     ]
     where (setup, offset) = calculateOffset scope name
   -- Arrays
   -- doAssignStmt (st, c, m) _ (IdArray name e) _  = error $ show name ++ show e
 
   doIfStmt scope tk (_, cond) (_, true) (_, false) = buildString [
-    "#IS",
-    comment tk "If",
-    debugStatement scope tk,
-    cond,
-    pop "eax",
-    "\tcmpl $1, %eax",
-    "\tjnz startFalse" ++ tag,
-    true,
-    "\tjmp endFalse" ++ tag,
-    "startFalse" ++ tag ++ ":",
-    false,
-    "endFalse" ++ tag ++ ":"
+      "#IS",
+      comment tk "If",
+      debugStatement scope tk,
+      cond,
+      pop "eax",
+      "\tcmpl $1, %eax",
+      "\tjnz " ++ start,
+      true,
+      "\tjmp " ++ end,
+      start ++ ":",
+      false,
+      end ++ ":"
     ]
-    where tag = buildLabelTag scope tk
+    where tag   = buildLabelTag scope tk
+          start = "startFalse" ++ tag
+          end   = "endFalse" ++ tag
 
   doLoopStmt scope tk (_, cond) (_, children) = buildString [
-    "#LS",
-    comment tk "Loop",
-    debugStatement scope tk,
-    start,
-    cond,
-    pop "eax",
-    "\tcmpl $1, %eax",
-    "\tjnz " ++ (init done),
-    children,
-    "\tjmp " ++ (init start),
-    done
+      "#LS",
+      comment tk "Loop",
+      debugStatement scope tk,
+      start ++ ":",
+      cond,
+      pop "eax",
+      "\tcmpl $1, %eax",
+      "\tjnz " ++ done,
+      children,
+      "\tjmp " ++ start,
+      done ++ ":"
     ]
-    where
-          tag   = buildLabelTag scope tk
-          start = "startLoop" ++ tag ++ ":"
-          done  = "doneLoop" ++ tag ++ ":"
+    where tag   = buildLabelTag scope tk
+          start = "startLoop" ++ tag
+          done  = "doneLoop" ++ tag
 
   doArgument _ _ _ _    = "#A\n"
 
@@ -371,16 +371,20 @@ buildString = intercalate "\n" . filter (/= "")
 --                                     setup   offset
 calculateOffset :: Scope -> String -> (String, String)
 calculateOffset (st, c, m, d) name
+  -- in and out are globals
   | name == "in" || name == "out" =
     ("", "(" ++ name ++ ")")
+
   -- Need to check if it is a local, a parameter, or a class var
-  -- it is a local or a parameter
   | inM =
+    -- it is a local or a parameter
     ("", calculateLocalOffset (st, c, m, d) name)
-  -- it is a class variable
   | otherwise = (
-    -- evaluate local class
+    -- it is a class variable
+
+    -- evaluate class
     "\tmovl 8(%ebp), %ebx",
+
     -- offset
     show ((nthCVar + 2) * 4 )++ "(%ebx) # offset of " ++ name
     )
@@ -394,9 +398,11 @@ calculateLocalOffset (_, _, m, _) name
   | nthVar == nthM  = -- return value
     "-4(%ebp) # offset of return value for (" ++ name ++ ")"
   | nthVar > nthM   = -- it is a local
+    -- +1 because of saved %ebp (first offset is at -4)
     "-" ++ (show ((nthVar - nthM + 1) * 4)) ++ "(%ebp) # offset of " ++ name
   | otherwise       = -- it is a parameter
-    -- +3 because of saved %ebp, return address, and class me
+    -- +3 because of saved %ebp, return address, and class me (first offset is
+    -- at +12)
     show (((nParams - nthVar - 1) + 3) * 4) ++ "(%ebp) # offset of " ++ name
   where nthVar  = getIndex symbol (getVariables m) 0 name
         nthM    = getIndex symbol (getVariables m) 0 (symbol m)
@@ -412,43 +418,18 @@ arithmetic f expr1 expr2 op =
     f expr2,
     pop "ebx", -- Expression 2
     pop "eax", -- Expression 1
-    doMDorAS op,
+    if op == "imull" || op == "idivl" then
+      buildString [
+        -- cleanup edx for overflow
+        "\tmovl %eax, %edx\n",
+        "\tsarl $31, %edx\n",
+        "\t" ++ op ++ " %ebx\n" -- eax = e1 op e2
+      ]
+    else
+      "\t" ++ op ++ " %ebx, %eax" -- eax = e1 op e2
+      ,
     push "%eax"
-    ]
-
-doMDorAS :: String -> String
-doMDorAS op
-  | op == "imull" || op == "idivl" = concat [
-    "\tmovl %eax, %edx\n",
-    "\tsarl $31, %edx\n",
-    "\t" ++ op ++ " %ebx\n" -- eax = e1 op e2
-    ]
-  | otherwise = "\t" ++ op ++ " %ebx, %eax" -- eax = e1 op e2
-
-cmp :: (Expression -> String) -> Scope -> Token -> Expression -> Expression -> String -> String
-cmp f scope tk expr1 expr2 op =
-  buildString [
-    f expr1,
-    f expr2,
-    pop "ebx", -- Expression 2
-    pop "eax", -- Expression 1
-    "\tcmpl %ebx, %eax",
-    "\tj" ++ (case op of
-                "eq" -> "e"
-                "gt" -> "g"
-                "gteq" -> "ge"
-                _     -> error "Unsupported comparison"
-                )
-          ++ " " ++ (init noDone),
-    push "$0",
-    "\tjmp " ++ (init yesDone),
-    noDone,
-    push "$1",
-    yesDone
   ]
-  where tag     = buildLabelTag scope tk
-        yesDone = "yes" ++ tag ++ ":"
-        noDone  = "no" ++ tag ++ ":"
 
 push :: String -> String
 push = (++) "\tpushl "
@@ -466,6 +447,24 @@ nullPointerTest tk = buildString [
     "\taddl $4, %esp"
   ]
 
+setupObj :: Symbol -> String
+setupObj sym = buildString [
+    "\t# Allocate space for a new " ++ (symbol sym),
+
+    -- calloc arguments
+    -- # of object variables plus two reserved spots
+    push "$" ++ show ((length (getVariables sym) + 2) * 4),
+    push "$1",
+
+    "\tcall calloc",
+    "\tincl (GLOBAL_OODLE_OBJECT_COUNT)",
+
+    -- cleanup after calloc
+    "\taddl $8, %esp",
+
+    -- save pointer to the VFT
+    "\tmovl $" ++ vft_label (symbol sym) ++ ", (%eax)"
+  ]
 
 debugStatement :: Scope -> Token -> String
 debugStatement (st, c, m, d) tk =
@@ -488,9 +487,9 @@ vft_label :: String -> String
 vft_label = (++) "VFT"
 
 buildVFT :: Scope -> Symbol -> [(String, String)]
-buildVFT (st, _, _, _) (Symbol name (ClassDecl tk "" vars methods _)) =
+buildVFT _ (Symbol name (ClassDecl _ "" _ methods _)) =
   map (\m -> (name, symbol m)) (methods)
-buildVFT scope (Symbol name (ClassDecl tk parentName vars methods _)) =
+buildVFT scope (Symbol name (ClassDecl tk parentName _ methods _)) =
   nub (overwritten ++ new)
   where (st, _, _, _) = scope
         parent = deE $ findSymbol st (parentName, tk)

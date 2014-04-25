@@ -77,13 +77,11 @@ instance Walkable (Error SymbolTable) where
                   findSymbol st ("ood", tk)
     vars' <- vars
     methods' <- methods
-    let methods'' = case name of
-                      "Reader"  -> pushMethod fakeToken "io_read" TypeInt 0 [] []
-                                  : methods'
+    let methods'' = (case name of
+                      "Reader"  -> [pushMethod fakeToken "io_read" TypeInt 0 [] []]
                       "Writer"  ->
-                        pushMethod fakeToken "io_write" typeNull 1 [pushVar fakeToken "" TypeInt] []
-                        : methods'
-                      _         -> methods'
+                        [pushMethod fakeToken "io_write" typeNull 1 [pushVar fakeToken "" TypeInt] []]
+                      _         -> []) ++ methods'
     return [pushClass tk name (symbol parent) (getVariables parent ++ vars') methods'' (buildInherited parent)]
 
     where buildInherited (Symbol name (ClassDecl _ _ _ methods inherited)) =

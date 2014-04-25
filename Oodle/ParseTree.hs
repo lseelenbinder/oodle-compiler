@@ -51,6 +51,11 @@ data Type
       | TypeArray Type
       | TypeNoop
 
+typeNull :: Type
+typeNull = TypeId (Id "null")
+typeString :: Type
+typeString = TypeId (Id "String")
+
 instance Show Type where
   (show) TypeInt                = "Int"
   (show) TypeBoolean            = "Boolean"
@@ -59,11 +64,6 @@ instance Show Type where
   (show) (TypeExp t _ )         = show t
   (show) (TypeArray t)          = "[]" ++ show t
   (show) TypeNoop               = "Noop"
-
-typeNull :: Type
-typeNull = TypeId (Id "null")
-typeString :: Type
-typeString = TypeId (Id "String")
 
 instance Eq Type where
   (==) (TypeId _) (TypeId (Id "null")) = True
