@@ -13,9 +13,7 @@ unsupportedFeatures st = walk (st, (head st), (head st), False)
 instance Walkable [String] where
   reduce = concatMap (filter (/= ""))
 
-  doClass _ tk name parentName _ _
-    | parentName /= ""        = [msgWithToken tk "class inheritance" name]
-    | otherwise               = []
+  doClass _ _ _ _ _ _ = []
 
   doMethod _ _ _ _ _ _ _ = []
 

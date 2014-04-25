@@ -2,12 +2,12 @@
 
 module Oodle.CodeGenerator where
 
-import Data.List (intercalate, findIndex)
+import Data.List (intercalate, findIndex, nub)
 import Data.Maybe (fromMaybe)
 
 import Oodle.SymbolTable (
   SymbolTable,
-  Symbol,
+  Symbol(..),
   Declaration(..),
   findSymbol,
   findDecl,
@@ -15,6 +15,7 @@ import Oodle.SymbolTable (
   decl,
   isClassDecl,
   getMethods,
+  getInheritedMethods,
   getVariables,
   resolveScope,
   Scope
@@ -76,7 +77,7 @@ codeGenerator st debug start = buildString $ lines $ buildString [
   "\n"
   ]
   where entry = getEntryPoint st
-        (ClassDecl tk _ _) = decl (st !! 4)
+        (ClassDecl tk _ _ _ _) = decl (st !! 4)
         filename = (getFilePath (getPosition tk))
         scope = (st, (head st), (head st), debug)
         reader = deE $ findSymbol st ("Reader", tk)
@@ -114,7 +115,23 @@ instance Walkable String where
       _     -> error $ show strings
     where (nodeType, nodeRest) = span (/= '\n') (head strings)
 
-  doClass _ _ _ _ _ _ = "#C\n"
+  doClass scope tk name parentName _ _ = buildString [
+    "#C\n",
+    (vft_label name) ++ ":",
+    if parentName == "" && name /= "ood" then
+      "\t.long " ++ vft_label "ood"
+    else
+      if name == "ood" then
+        "\t.long 0"
+      else
+        "\t.long " ++ vft_label parentName
+        ,
+
+    buildString $ map (\(n, f) -> "\t.long " ++ n ++ "_" ++ f) vft
+    ]
+    where
+          (_, c, _, _) = scope
+          vft = buildVFT scope c
 
   doMethod scope _ name _ _ (vars, _) (_, stmts) = buildString [
     "#M",
@@ -164,13 +181,19 @@ instance Walkable String where
     -- check for null pointer
     nullPointerTest tk,
 
-    "\tcall " ++ className ++ "_" ++ name,
+    "\tleal " ++ vft_label className ++ ", %eax",
+    "\tcall *" ++ show (4 * (nthFunction + 1)) ++ "(%eax)",
     "\taddl $" ++ (show ((length args + 1) * 4)) ++ ", %esp" -- get rid of arguments & me (+1)
     ]
     where
       classDecl = deE $ resolveScope scope callScope'
+      cls       = deE $ findDecl st (classDecl, tk)
       (st, _, _, _) = scope
-      className = symbol (deE $ findDecl st (classDecl, tk))
+      nthFunction   = getIndex symbol
+                        (snd (unzip (getInheritedMethods cls)))
+                        (length (getInheritedMethods cls) + getIndex symbol (getMethods cls) 0 name)
+                        name
+      className = symbol (cls)
 
   doVariable _ _ _ _ _ = "#V\n"
 
@@ -236,6 +259,9 @@ instance Walkable String where
 
           -- cleanup after calloc
           "\taddl $8, %esp",
+
+          -- save pointer to the VFT
+          "\tmovl $" ++ vft_label cls' ++ ", (%eax)",
 
           -- push the pointer
           push "%eax"
@@ -361,8 +387,7 @@ calculateOffset (st, c, m, d) name
   where inM     = case findSymbol (getVariables m) (name, fakeToken) of
                           Ok _ -> True
                           Failed _ -> False
-        nthCVar = fromMaybe (error "OOPS")
-                    (findIndex (\s -> symbol s == name) (getVariables c))
+        nthCVar = getIndex symbol (getVariables c) 0 name
 
 calculateLocalOffset :: Scope -> String -> String
 calculateLocalOffset (_, _, m, _) name
@@ -373,10 +398,8 @@ calculateLocalOffset (_, _, m, _) name
   | otherwise       = -- it is a parameter
     -- +3 because of saved %ebp, return address, and class me
     show (((nParams - nthVar - 1) + 3) * 4) ++ "(%ebp) # offset of " ++ name
-  where nthVar  = fromMaybe (error "OOPS")
-                    (findIndex (\s -> symbol s == name) (getVariables m))
-        nthM    = fromMaybe (error "OOPS")
-                    (findIndex (\s -> symbol s == symbol m) (getVariables m))
+  where nthVar  = getIndex symbol (getVariables m) 0 name
+        nthM    = getIndex symbol (getVariables m) 0 (symbol m)
         (MethodDecl _ _ nParams _ _) = decl m
 
 varAssembly :: Scope -> String -> String
@@ -456,3 +479,24 @@ debugStatement (st, c, m, d) tk =
 buildLabelTag :: Scope -> Token -> String
 buildLabelTag (_, _, m, _) tk =
   symbol m ++ "_" ++ show (getLineNo (getPosition tk)) ++ show (getCol (getPosition tk))
+
+getIndex :: (Eq a) => (b -> a) -> [b] -> Int -> a -> Int
+getIndex f haystack err needle =
+  fromMaybe (err) (findIndex (\s -> needle == f s) haystack)
+
+vft_label :: String -> String
+vft_label = (++) "VFT"
+
+buildVFT :: Scope -> Symbol -> [(String, String)]
+buildVFT (st, _, _, _) (Symbol name (ClassDecl tk "" vars methods _)) =
+  map (\m -> (name, symbol m)) (methods)
+buildVFT scope (Symbol name (ClassDecl tk parentName vars methods _)) =
+  nub (overwritten ++ new)
+  where (st, _, _, _) = scope
+        parent = deE $ findSymbol st (parentName, tk)
+        parentVTF = buildVFT scope parent
+
+        overwritten = map (\(c, f) -> case findSymbol methods (f, fakeToken) of
+                                        Ok _ -> (name, f)
+                                        Failed _ -> (c, f)) parentVTF
+        new         = map (\m -> (name, symbol m)) (methods)

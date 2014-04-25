@@ -158,12 +158,17 @@ main = do
         --
         -- Symbol Table
         let symbolTable = symbolTableBuilder parseTree'
+
         unless (verifyParse symbolTable) $ do
           hPutStrLn stderr $ printParserOutput symbolTable
           hPutStrLn stderr $ printErrorCount (succ errorCount)
           exitWith $ ExitFailure 1
 
         let symbolTable' = deE symbolTable
+
+        when verbose $
+          hPrint stderr symbolTable'
+
         when ((length symbolTable' - 4) > length inputFiles - 1) $
           hPutStrLn stderr "Warning: more than one class per file"
 

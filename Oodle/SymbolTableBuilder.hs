@@ -24,6 +24,18 @@ symbolTableBuilder start = do
         scope = ([], (head base), (head base), False)
 
 instance Walkable (Error SymbolTable) where
+  walk scope (Start classes) =
+    let
+      walk' :: Scope -> [Class] -> Error SymbolTable
+      walk' (st, _, _, _) [] = return st
+      walk' (st, cls, m, d) (c:clses) = do
+        nc <- newClass
+        walk' ((st ++ nc), cls, m, d) clses
+        where newClass = case walkClass (st, cls, m, d) c of
+                          Ok cl -> return cl
+                          Failed s -> fail s
+    in
+      walk' scope classes
 
   reduce [] = return []
   reduce symboltables = do
@@ -45,25 +57,37 @@ instance Walkable (Error SymbolTable) where
             reduce' tk "variable" joined
           Symbol _ (MethodDecl tk _ _ _ _) ->
             reduce' tk "method" joined
-          Symbol _ (ClassDecl tk _ _) ->
+          Symbol _ (ClassDecl tk _ _ _ _) ->
             reduce' tk "class" joined
 
   doVariable s tk name typ _    = doArgument s tk name typ
   doArgumentArr s tk name _ typ = doArgument s tk name typ
   doArgument _ tk name typ      = return [pushVar tk name (buildType typ)]
 
-  doClass _ tk name _ (_, vars) (_, methods) = do
+  doClass (st, _, _, _) tk name parentName (_, vars) (_, methods) = do
+    parent <- if parentName /= "" then do
+                case findSymbol st (parentName, tk) of
+                  Ok p -> return p
+                  Failed _ ->
+                    fail $ msgWithToken tk "parent class does not exist" name
+              else do
+                if name == "ood" then
+                  return $ pushClass fakeToken "" "" [] [] []
+                else
+                  findSymbol st ("ood", tk)
     vars' <- vars
     methods' <- methods
-    let methods'' =
-                    case name of
+    let methods'' = case name of
                       "Reader"  -> pushMethod fakeToken "io_read" TypeInt 0 [] []
                                   : methods'
                       "Writer"  ->
                         pushMethod fakeToken "io_write" typeNull 1 [pushVar fakeToken "" TypeInt] []
                         : methods'
                       _         -> methods'
-    return [pushClass tk name vars' methods'']
+    return [pushClass tk name (symbol parent) (getVariables parent ++ vars') methods'' (buildInherited parent)]
+
+    where buildInherited (Symbol name (ClassDecl _ _ _ methods inherited)) =
+            inherited ++ (map (\m -> (name, m)) methods)
 
   doMethod _ tk name typ (_, args) (_, vars) _ = do
     args' <- args
@@ -79,8 +103,9 @@ instance Walkable (Error SymbolTable) where
   doExpression _ _          = return []
 
 -- Class Declarations
-pushClass :: Token -> String -> [Symbol] -> [Symbol] -> Symbol
-pushClass tk sym var methods = Symbol sym (ClassDecl tk var methods)
+pushClass :: Token -> String -> String -> [Symbol] -> [Symbol] -> [(String, Symbol)] -> Symbol
+pushClass tk sym parent vars methods inherited =
+  Symbol sym (ClassDecl tk parent vars methods inherited)
 
 -- Variable Declarations
 pushVar :: Token -> String -> Type -> Symbol

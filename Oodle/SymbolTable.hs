@@ -16,6 +16,7 @@ module Oodle.SymbolTable
     getNamedDecl,
     getType,
     getMethods,
+    getInheritedMethods,
     getVariables,
     getParameterTypes,
     resolveScope,
@@ -37,8 +38,8 @@ data Symbol = Symbol {
   deriving (Show, Eq)
 
 data Declaration
-    --                variables    methods
-    = ClassDecl Token [Symbol]     [Symbol]
+    --                parent variables    methods  inherited methods
+    = ClassDecl Token String [Symbol]     [Symbol] [(String, Symbol)]
     --                      parameters  parameter types   variables
     | MethodDecl Token Type Int         [Type]            [Symbol]
     | VarDecl    { varToken :: Token, type' :: Type }
@@ -68,11 +69,14 @@ getType (MethodDecl _ t _ _ _) = t
 getVariables :: Symbol -> [Symbol]
 getVariables sym =
   case decl sym of
-    ClassDecl _ vars _ -> vars
+    ClassDecl _ _ vars _ _ -> vars
     MethodDecl _ _ _ _ vars -> vars
 
 getMethods :: Symbol -> [Symbol]
-getMethods (Symbol _ (ClassDecl _ _ methods)) = methods
+getMethods (Symbol _ (ClassDecl _ _ _ methods _)) = methods
+
+getInheritedMethods :: Symbol -> [(String, Symbol)]
+getInheritedMethods (Symbol _ (ClassDecl _ _ _ _ methods)) = methods
 
 -- Get a class declaration from a SymbolTable
 getClassDecl :: SymbolTable -> (String, Token) -> Error Declaration
@@ -80,7 +84,7 @@ getClassDecl = getNamedDecl
 
 -- Get a method declaration from a parent class declaration
 getMethodDecl :: Declaration -> (String, Token) -> Error Declaration
-getMethodDecl (ClassDecl _ _ methods) = getNamedDecl methods
+getMethodDecl (ClassDecl _ _ _ methods inherited) = getNamedDecl (methods ++ snd (unzip inherited))
 
 getNamedDecl :: [Symbol] -> (String, Token) -> Error Declaration
 getNamedDecl symbols sym = do
@@ -92,7 +96,8 @@ findSymbol :: [Symbol] -> (String, Token) -> Error Symbol
 findSymbol symbols (sym, tk) =
   if not $ null match then return $ head match
   else
-    fail $ msgWithToken tk "undeclared variable/method" sym
+    fail $ concatMap (\s -> show s ++ "\n") symbols ++
+      msgWithToken tk "undeclared variable/method" sym
   where match = dropWhile (\s -> symbol s /= sym) symbols
 
 -- Symbol must exist
@@ -124,6 +129,9 @@ resolveScope (st, cls, m, d) scope =
 
     ExpressionStr _ _ ->
       getDeclFromType "String"
+
+    ExpressionMe _ ->
+      return $ decl cls
 
     _ -> fail $
             msgWithToken' (getExprToken scope) "scope not a valid expression"
