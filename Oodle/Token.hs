@@ -3,7 +3,11 @@
 module Oodle.Token where
 
 -- TokenPosition holds the file, line, and column # of a found token
-data TokenPosition = TokenPosition { getFilePath :: FilePath, getLineNo ::  Int, getCol :: Int }
+data TokenPosition = TokenPosition {
+    getFilePath :: FilePath,
+    getLineNo :: Int,
+    getCol :: Int
+  }
   deriving (Show, Eq)
 
 printToken :: Token -> String
@@ -14,7 +18,8 @@ printToken (Token t (TokenPosition file line col)) =
 data Token = Token { getToken :: TokenType, getPosition :: TokenPosition }
   deriving (Eq, Show)
 
--- TokenType stores the various types of tokens and any data associated with them.
+-- TokenType stores the various types of tokens and any data associated with
+-- them.
 data TokenType
       = TokenIntLiteral { getInt :: Int }
       | TokenNewline

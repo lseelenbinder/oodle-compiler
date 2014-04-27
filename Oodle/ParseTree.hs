@@ -66,15 +66,15 @@ instance Show Type where
   (show) TypeNoop               = "Noop"
 
 instance Eq Type where
-  (==) (TypeId _) (TypeId (Id "null")) = True
-  (==) (TypeId (Id "null")) (TypeId _) = True
+  (==) (TypeId _) (TypeId (Id "null"))  = True
+  (==) (TypeId (Id "null")) (TypeId _)  = True
   (==) (TypeId (Id t)) (TypeId (Id t')) = t == t'
-  (==) TypeInt TypeInt              = True
-  (==) TypeBoolean TypeBoolean      = True
-  (==) TypeNoop TypeNoop            = True
-  (==) (TypeExp t e) (TypeExp t' e')  = t == t' && e == e'
-  (==) (TypeArray t) (TypeArray t')  = t == t'
-  (==) _ _ = False
+  (==) TypeInt TypeInt                  = True
+  (==) TypeBoolean TypeBoolean          = True
+  (==) TypeNoop TypeNoop                = True
+  (==) (TypeExp t e) (TypeExp t' e')    = t == t' && e == e'
+  (==) (TypeArray t) (TypeArray t')     = t == t'
+  (==) _ _                              = False
 
 isArrayType :: Type -> Bool
 isArrayType (TypeArray _) = True

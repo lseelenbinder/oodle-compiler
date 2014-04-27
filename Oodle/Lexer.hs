@@ -1,12 +1,10 @@
 -- Filename: Oodle/Lexer.hs
 -- Contents: All the code for the Oodle lexer.
 
-module Oodle.Lexer (
-  lexer
-  ) where
+module Oodle.Lexer (lexer) where
 
 import Oodle.Token
-import Data.Char
+import Data.Char (isDigit, isSpace, isAlpha, isAlphaNum, isOctDigit)
 
 -- The lexer takes a string and parses it according to the Oodle tokens.
 lexer :: String -> FilePath -> [Token]
@@ -148,7 +146,7 @@ lexString cs =
 scanUntilDouble :: String -> String
 -- \xBAD denotes an unterminated string
 scanUntilDouble [] = "\xBAD"
--- \xBAD denotes an unterminated string due to a newline
+-- \xBFD denotes an unterminated string due to a newline
 scanUntilDouble('\n':_) = "\xBFD"
 scanUntilDouble('\r':'\n':_) = "\xBFD"
 scanUntilDouble('"':_) = "\"" -- I'm done parsing the string.

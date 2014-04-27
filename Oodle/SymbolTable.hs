@@ -1,30 +1,4 @@
-{-# LANGUAGE FlexibleInstances #-}
-
-module Oodle.SymbolTable
-  (
-    Symbol(..),
-    SymbolTable,
-    Declaration(..),
-    Scope,
-    findDecl,
-    findSymbol,
-    findKnownSymbol,
-    isClassDecl,
-    isMethodDecl,
-    isVarDecl,
-    getClassDecl,
-    getMethodDecl,
-    getNamedDecl,
-    getType,
-    getMethods,
-    getInheritedMethods,
-    getVariables,
-    getParameterTypes,
-    resolveScope,
-    buildType,
-    unbuildArray
-    )
-where
+module Oodle.SymbolTable where
 
 import Oodle.Error
 import Oodle.ParseTree
@@ -49,10 +23,6 @@ data Declaration
 --                         Class   Method  Debug
 type Scope = (SymbolTable, Symbol, Symbol, Bool)
 
-isVarDecl :: Symbol -> Bool
-isVarDecl (Symbol _ VarDecl{}) = True
-isVarDecl _ = False
-
 isClassDecl :: Symbol -> Bool
 isClassDecl (Symbol _ ClassDecl{}) = True
 isClassDecl _ = False
@@ -60,6 +30,10 @@ isClassDecl _ = False
 isMethodDecl :: Symbol -> Bool
 isMethodDecl (Symbol _ MethodDecl{}) = True
 isMethodDecl _ = False
+
+isVarDecl :: Symbol -> Bool
+isVarDecl (Symbol _ VarDecl{}) = True
+isVarDecl _ = False
 
 getParameterTypes :: Declaration -> [Type]
 getParameterTypes (MethodDecl _ _ _ types _) = types

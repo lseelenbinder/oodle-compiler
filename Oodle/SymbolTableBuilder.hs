@@ -10,9 +10,9 @@ import Oodle.TreeWalker
 getSymbolTable :: SymbolTable
 getSymbolTable =
   [
-  -- global Reader & Writer
-  Symbol "in" (VarDecl fakeToken (TypeId (Id "Reader"))),
-  Symbol "out" (VarDecl fakeToken (TypeId (Id "Writer")))
+    -- global Reader & Writer
+    Symbol "in" (VarDecl fakeToken (TypeId (Id "Reader"))),
+    Symbol "out" (VarDecl fakeToken (TypeId (Id "Writer")))
   ]
 
 -- Build Symbol Table
@@ -31,9 +31,7 @@ instance Walkable (Error SymbolTable) where
       walk' (st, cls, m, d) (c:clses) = do
         nc <- newClass
         walk' ((st ++ nc), cls, m, d) clses
-        where newClass = case walkClass (st, cls, m, d) c of
-                          Ok cl -> return cl
-                          Failed s -> fail s
+        where newClass = walkClass (st, cls, m, d) c
     in
       walk' scope classes
 
@@ -47,9 +45,10 @@ instance Walkable (Error SymbolTable) where
     else
       let
         reduce' tk kind symbols =
-          case catchDuplicates (getSymbolTable ++ symbols') [] of
+          case catchDuplicates (getSymbolTable ++ symbols') of
             Ok _      -> return $ symbols'
-            Failed s  -> fail $ msgWithToken' tk ("redeclared " ++ kind ++ " " ++ s)
+            Failed s  -> fail $ msgWithToken' tk
+                                  ("redeclared " ++ kind ++ " " ++ s)
           where symbols' = takeWhileFirst symbols
       in
         case head joined of
@@ -78,11 +77,14 @@ instance Walkable (Error SymbolTable) where
     vars' <- vars
     methods' <- methods
     let methods'' = (case name of
-                      "Reader"  -> [pushMethod fakeToken "io_read" TypeInt 0 [] []]
+                      "Reader"  ->
+                        [pushMethod fakeToken "io_read" TypeInt 0 [] []]
                       "Writer"  ->
-                        [pushMethod fakeToken "io_write" typeNull 1 [pushVar fakeToken "" TypeInt] []]
+                        [pushMethod fakeToken "io_write" typeNull 1
+                          [pushVar fakeToken "" TypeInt] []]
                       _         -> []) ++ methods'
-    return [pushClass tk name (symbol parent) (getVariables parent ++ vars') methods'' (buildInherited parent)]
+    return [pushClass tk name (symbol parent) (getVariables parent ++ vars')
+              methods'' (buildInherited parent)]
 
     where buildInherited (Symbol name (ClassDecl _ _ _ methods inherited)) =
             inherited ++ (map (\m -> (name, m)) methods)
@@ -101,7 +103,8 @@ instance Walkable (Error SymbolTable) where
   doExpression _ _          = return []
 
 -- Class Declarations
-pushClass :: Token -> String -> String -> [Symbol] -> [Symbol] -> [(String, Symbol)] -> Symbol
+pushClass :: Token -> String -> String -> [Symbol] -> [Symbol] ->
+              [(String, Symbol)] -> Symbol
 pushClass tk sym parent vars methods inherited =
   Symbol sym (ClassDecl tk parent vars methods inherited)
 
@@ -113,16 +116,19 @@ pushVar tk sym t = Symbol sym (VarDecl tk t)
 pushMethod :: Token -> String -> Type -> Int -> [Symbol] -> [Symbol] -> Symbol
 pushMethod tk sym t argCount args vars =
   Symbol sym (MethodDecl tk t argCount args' vars)
-  where args' = map (type' . decl)  args
+  where args' = map (type' . decl) args
 
-catchDuplicates :: [Symbol] -> [String] -> Error Bool
-catchDuplicates [] _ = return True
-catchDuplicates (s:xs) checked =
-  if sym `elem` checked then
-    fail $ show sym
-  else
-    catchDuplicates xs (sym : checked)
-  where sym = symbol s
+catchDuplicates :: [Symbol] -> Error Bool
+catchDuplicates symbols =
+  let
+    catchDuplicates' _ [] = return True
+    catchDuplicates' checked (sym:xs) =
+      if sym `elem` checked then
+        fail $ show sym
+      else
+        catchDuplicates' (sym : checked) xs
+  in
+    catchDuplicates' [] symbols
 
 takeWhileFirst :: SymbolTable -> SymbolTable
 takeWhileFirst [] = []

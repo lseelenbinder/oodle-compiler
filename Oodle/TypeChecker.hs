@@ -10,10 +10,6 @@ import Oodle.TreeWalker
 import Oodle.Token (Token, fakeToken)
 
 -- Check Types
---
-
-yay :: Error Type
-yay = return typeNull
 
 typeChecker :: SymbolTable -> Start -> Error Type
 typeChecker st = walk (st, (head st), (head st), False)
@@ -31,7 +27,9 @@ instance Walkable (Error Type) where
   doVariable (st, _, _, _) tk name t (_, exprT') = do
     exprT <- exprT'
     tExists <- tExists'
-    if tExists && (t == exprT) || (exprT == typeNull) || (exprT == TypeNoop) then
+    if tExists && (t == exprT)
+        || (exprT == typeNull)
+        || (exprT == TypeNoop) then
       yay
     else
       fail (msgWithToken tk (wrongTypeMsg t exprT) name)
@@ -139,7 +137,21 @@ typeOfExpression scope e =
     checkBothTypeMulE'  = checkBothTypeMulE scope
     checkTypeArray e1 e2 types = checkBothTypeMulE' e1 e2 types
 
-methodCall :: Scope -> Token -> Expression -> String -> [Type] -> Bool -> Error Type
+getVarType :: Scope -> Id -> Error Type
+getVarType (_, c, m, _) (Id name) = do
+  d <- getNamedDecl
+        (getSymbolTable ++ getVariables m ++ getVariables c)
+        (name, fakeToken)
+  return $ type' d
+getVarType scope (IdArray name exprs) = do
+  t <- getVarType scope (Id name)
+  return $ unbuildArray t (length exprs)
+
+yay :: Error Type
+yay = return typeNull
+
+methodCall ::
+  Scope -> Token -> Expression -> String -> [Type] -> Bool -> Error Type
 methodCall scope tk callScope name actualP returnNull = do
     callScope' <- resolveScope scope callScope
     method <- getMethodDecl callScope' (name, tk)
@@ -149,14 +161,15 @@ methodCall scope tk callScope name actualP returnNull = do
       if matchParameters actualP formalP then return
         (if returnNull then typeNull else (Oodle.SymbolTable.getType method))
       else
-      fail (msgWithToken' tk ("actual parameters do not match formal parameters ("
-        ++ show actualP ++ " != " ++ show formalP ++ ")"))
+      fail $ msgWithToken' tk $
+        "actual parameters do not match formal parameters ("
+        ++ show actualP ++ " != " ++ show formalP ++ ")"
     else fail $ msgWithToken tk "incorrect number of parameters" name
   where matchParameters [] [] = True
         matchParameters ((TypeId t):actual) ((TypeId t'):formal) =
           -- check if either side is a child of the other
-          isChildType scope (TypeId t) (TypeId t') ||
-          isChildType scope (TypeId t') (TypeId t)
+          isChildType scope (TypeId t) (TypeId t')
+          || isChildType scope (TypeId t') (TypeId t)
           && matchParameters actual formal
         matchParameters (a:actual) (f:formal) =
           -- check primative types
@@ -166,7 +179,9 @@ methodCall scope tk callScope name actualP returnNull = do
 isChildType :: Scope -> Type -> Type -> Bool
 isChildType _ (TypeId _) (TypeId (Id "")) = False
 isChildType scope (TypeId (Id t)) (TypeId (Id t')) =
-  t == t' || t == parent || isChildType scope (TypeId (Id t)) (TypeId (Id parent))
+  t == t'
+  || t == parent
+  || isChildType scope (TypeId (Id t)) (TypeId (Id parent))
   where (st, _, _, _) = scope
         cls  = findKnownSymbol st t'
         (ClassDecl _ parent _ _ _) = decl cls
@@ -210,11 +225,3 @@ checkBothTypeMulE scope e1 e2 (t:types) = do
 wrongTypeMsg :: Type -> Type -> String
 wrongTypeMsg expectedT t =
   "expected type: " ++ show expectedT ++ " got type: " ++ show t
-
-getVarType :: Scope -> Id -> Error Type
-getVarType (_, c, m, _) (Id name) = do
-  d <- getNamedDecl (getSymbolTable ++ getVariables m ++ getVariables c) (name, fakeToken)
-  return $ type' d
-getVarType scope (IdArray name exprs) = do
-  t <- getVarType scope (Id name)
-  return $ unbuildArray t (length exprs)

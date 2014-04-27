@@ -6,7 +6,7 @@ import Oodle.SymbolTable (
   Scope
   )
 import Oodle.ParseTree
-import Oodle.Token
+import Oodle.Token (Token)
 
 class Walkable a where
 
@@ -37,7 +37,8 @@ class Walkable a where
 
   -- doVariable token name type expression
   doVariable      :: (Walkable a) =>
-                        Scope -> Token -> String -> Type -> (Expression, a) -> a
+                        Scope -> Token -> String -> Type -> (Expression, a)
+                        -> a
 
   -- doAssignStmtArr token varName arrayScope expression
   doAssignStmtArr :: (Walkable a) =>
@@ -71,15 +72,18 @@ class Walkable a where
   walk scope (Start classes) =
     reduceMap (walkClass scope) classes
 
-  walkClass (st, _, _, debug) (Class tk (Id className) (Id parentName) vars methods) =
-      reduce [doClass nScope tk className parentName (vars, v) (methods, m), v, m]
+  walkClass (st, _, _, debug)
+    (Class tk (Id className) (Id parentName) vars methods) =
+      reduce [doClass nScope tk className parentName (vars, v) (methods, m),
+              v, m]
     where c       = findKnownSymbol st className
           nScope  = (st, c, c, debug)
           v       = reduceMap (walkVariable nScope) vars
           m       = reduceMap (walkMethod nScope) methods
 
   walkMethod (st, c, _, debug) (Method tk (Id name) typ args vars stmts) =
-      reduce [doMethod nScope tk name typ (args, a) (vars, v) (stmts, s), a, v, s]
+      reduce [doMethod nScope tk name typ (args, a) (vars, v) (stmts, s), a,
+              v, s]
     where m       = findKnownSymbol (getMethods c) name
           nScope  = (st, c, m, debug)
           a       = reduceMap (walkArgument nScope) args
@@ -99,8 +103,8 @@ class Walkable a where
 
   walkStatement scope s =
     let
-      walkStmts  = reduceMap (walkStatement scope)
-      walkExpr    = walkExpression scope
+      walkStmts = reduceMap (walkStatement scope)
+      walkExpr  = walkExpression scope
     in
       case s of
         AssignStatement tk (IdArray varName arrayScope) expr ->
@@ -111,7 +115,7 @@ class Walkable a where
 
         AssignStatement tk (Id varName) expr ->
             reduce [doAssignStmt scope tk varName (expr, e), e]
-          where e           = walkExpr expr
+          where e = walkExpr expr
 
         IfStatement tk cond trueStmts falseStmts ->
             reduce [doIfStmt scope tk (cond, cond') (trueStmts, trueStmts')
@@ -130,7 +134,7 @@ class Walkable a where
         CallStatement tk callScope (Id name) arguments ->
             reduce [doCallStmt scope tk (callScope, callScope') name
                     (arguments, arguments'), callScope', arguments']
-          where callScope'  = walkExpr callScope
-                arguments'  = reduceMap walkExpr arguments
+          where callScope' = walkExpr callScope
+                arguments' = reduceMap walkExpr arguments
 
   walkExpression scope expr = reduce [doExpression scope expr]
