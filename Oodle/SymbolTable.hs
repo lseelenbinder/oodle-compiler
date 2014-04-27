@@ -8,6 +8,7 @@ module Oodle.SymbolTable
     Scope,
     findDecl,
     findSymbol,
+    findKnownSymbol,
     isClassDecl,
     isMethodDecl,
     isVarDecl,
@@ -99,6 +100,11 @@ findSymbol symbols (sym, tk) =
     fail $ concatMap (\s -> show s ++ "\n") symbols ++
       msgWithToken tk "undeclared variable/method" sym
   where match = dropWhile (\s -> symbol s /= sym) symbols
+
+findKnownSymbol :: [Symbol] -> String -> Symbol
+findKnownSymbol symbols sym =
+  head $ dropWhile (\s -> symbol s /= sym) symbols
+
 
 -- Symbol must exist
 findDecl :: [Symbol] -> (Declaration, Token) -> Error Symbol

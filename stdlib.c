@@ -96,9 +96,27 @@ void writeint(int num) {
 
 void nullpointertest(int lineno, void* ptr) {
   if (ptr == NULL) {
-    char msg[] = "Runtime error: null pointer exception on line \0";
+    char msg[] = "Runtime error: null pointer exception on line ";
     write(1, msg, sizeof(msg)-1);
     writeint(lineno);
     exit(0);
+  }
+}
+
+// ---------------------------------------------------------------------
+// Runtime type checker
+// ---------------------------------------------------------------------
+void typechecker(int lineno, const void* destVFT, void* newObj) {
+  char msg[] = "Runtime error: mismatched types on line ";
+  int newObjVFT = *((int*) newObj);
+
+  if ((int) destVFT == newObjVFT) {
+    return;
+  } else if (newObjVFT == 0) {
+    write(1, msg, sizeof(msg)-1);
+    writeint(lineno);
+    exit(0);
+  } else {
+    typechecker(lineno, destVFT, (void*) newObjVFT);
   }
 }

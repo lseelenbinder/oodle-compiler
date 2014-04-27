@@ -80,6 +80,10 @@ isArrayType :: Type -> Bool
 isArrayType (TypeArray _) = True
 isArrayType _ = False
 
+isNullType :: Type -> Bool
+isNullType (TypeId (Id "null")) = True
+isNullType _ = False
+
 data Expression
       = ExpressionInt Token Int
       | ExpressionId Token Id

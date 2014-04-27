@@ -5,25 +5,11 @@ module Oodle.CodeGenerator where
 import Data.List (intercalate, findIndex, nub)
 import Data.Maybe (fromMaybe)
 
-import Oodle.SymbolTable (
-  SymbolTable,
-  Symbol(..),
-  Declaration(..),
-  findSymbol,
-  findDecl,
-  symbol,
-  decl,
-  isClassDecl,
-  getMethods,
-  getInheritedMethods,
-  getVariables,
-  resolveScope,
-  Scope
-  )
+import Oodle.SymbolTable
 import Oodle.ParseTree
 import Oodle.Error (Error(..), deE)
 import Oodle.Token (Token(..), TokenPosition(..), printToken, fakeToken)
-import Oodle.TypeChecker (typeOfExpression)
+import Oodle.TypeChecker (typeOfExpression, getVarType)
 
 import Oodle.TreeWalker
 
@@ -40,6 +26,7 @@ codeGenerator st debug start = buildString $ lines $ buildString [
   else "",
   "STDOUT = 1",
   "STDIN = 0",
+  "VFTnull = 0",
 
   ".data",
   "\t.comm GLOBAL_OODLE_OBJECT_COUNT, 4, 4",
@@ -162,7 +149,19 @@ instance Walkable String where
     "#CS",
     comment tk "Call",
     debugStatement scope tk,
-    args', -- push arguments
+
+    -- TODO: runtime type checking
+    -- push arguments
+    buildString $
+      map (\(formal, actual) ->
+        actual
+        ++ "\n" ++
+        case formal of
+          (TypeId _) -> runtimeTypeCheck tk formal
+          _         -> ""
+        )
+      (zip formalP args'),
+
     -- accounts for empty call scopes
     case callScope' of
       ExpressionNoop -> -- implict me
@@ -180,12 +179,14 @@ instance Walkable String where
     where
       classDecl = deE $ resolveScope scope callScope'
       cls       = deE $ findDecl st (classDecl, tk)
+      (MethodDecl _ _ _ formalP _) = deE $ getMethodDecl (classDecl) (name, tk)
       (st, _, _, _) = scope
       nthFunction   = getIndex symbol
                         (snd (unzip (getInheritedMethods cls)))
                         (length (getInheritedMethods cls) + getIndex symbol (getMethods cls) 0 name)
                         name
       className = symbol (cls)
+      args'     = map (walkExpression scope) args
 
   doVariable _ _ _ _ _ = "#V\n"
 
@@ -315,16 +316,21 @@ instance Walkable String where
                 push "%eax"
               ]
 
-  doAssignStmt scope tk name (_, expr)  = buildString [
+  doAssignStmt scope tk name (expr', expr)  = buildString [
       "#AS",
       comment tk "Assignment",
       debugStatement scope tk,
       expr,
+      case newT of
+        TypeId _ -> runtimeTypeCheck tk destT
+        _        -> "",
       pop "eax",
       setup,
       "\tmovl %eax, " ++ offset
     ]
     where (setup, offset) = calculateOffset scope name
+          newT            = deE $ typeOfExpression scope expr'
+          destT           = deE $ getVarType scope (Id name)
   -- Arrays
   -- doAssignStmt (st, c, m) _ (IdArray name e) _  = error $ show name ++ show e
 
@@ -445,6 +451,16 @@ nullPointerTest tk = buildString [
     push "$" ++ show (getLineNo (getPosition tk)),
     "\tcall nullpointertest",
     "\taddl $4, %esp"
+  ]
+
+runtimeTypeCheck :: Token -> Type -> String
+runtimeTypeCheck tk t = buildString [
+    "# Variable Type: " ++ vft_label (show t),
+    push "$" ++ (vft_label (show t)),
+    push "$" ++ show (getLineNo (getPosition tk)),
+
+    "\tcall typechecker",
+    "\taddl $8, %esp"
   ]
 
 setupObj :: Symbol -> String

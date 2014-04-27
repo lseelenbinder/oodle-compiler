@@ -1,22 +1,10 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module Oodle.TypeChecker (typeChecker, typeOfExpression) where
+module Oodle.TypeChecker (typeChecker, typeOfExpression, getVarType) where
 
 import Oodle.Error
 import Oodle.ParseTree
-import Oodle.SymbolTable (
-  SymbolTable
-  , findSymbol
-  , resolveScope
-  , getMethodDecl
-  , getNamedDecl
-  , getParameterTypes
-  , getVariables
-  , type'
-  , unbuildArray
-  , symbol
-  , Scope)
-import qualified Oodle.SymbolTable (getType)
+import Oodle.SymbolTable
 import Oodle.SymbolTableBuilder (getSymbolTable)
 import Oodle.TreeWalker
 import Oodle.Token (Token, fakeToken)
@@ -69,15 +57,21 @@ instance Walkable (Error Type) where
   doAssignStmt scope tk name (_, expr) = do
     t <- getVarType scope (Id name)
     exprT <- expr
+
     let failMe = fail (msgWithToken' tk (wrongTypeMsg t exprT))
 
     if t == exprT then
       yay
     else
       case t of
-        TypeId _  -> if exprT == typeNull then yay
-                      else failMe
-        _         -> failMe
+        TypeId _ ->
+          if isNullType exprT then yay
+          else
+            -- check if either side is a child of the other
+            if isChildType scope t exprT || isChildType scope exprT t then
+              yay
+            else failMe
+        _ -> failMe
 
 
   doIfStmt scope tk cond s _ = doLoopStmt scope tk cond s
@@ -147,17 +141,36 @@ typeOfExpression scope e =
 
 methodCall :: Scope -> Token -> Expression -> String -> [Type] -> Bool -> Error Type
 methodCall scope tk callScope name actualP returnNull = do
-  callScope' <- resolveScope scope callScope
-  method <- getMethodDecl callScope' (name, tk)
-  let formalP = getParameterTypes method
+    callScope' <- resolveScope scope callScope
+    method <- getMethodDecl callScope' (name, tk)
+    let formalP = getParameterTypes method
 
-  if length actualP == length formalP then
-    if actualP == formalP then return
-      (if returnNull then typeNull else (Oodle.SymbolTable.getType method))
-    else
-    fail (msgWithToken tk ("actual parameters do not match formal parameters ("
-      ++ show actualP ++ " !=  "++ show formalP) name)
-  else fail $ msgWithToken tk "incorrect number of parameters" name
+    if length actualP == length formalP then
+      if matchParameters actualP formalP then return
+        (if returnNull then typeNull else (Oodle.SymbolTable.getType method))
+      else
+      fail (msgWithToken' tk ("actual parameters do not match formal parameters ("
+        ++ show actualP ++ " != " ++ show formalP ++ ")"))
+    else fail $ msgWithToken tk "incorrect number of parameters" name
+  where matchParameters [] [] = True
+        matchParameters ((TypeId t):actual) ((TypeId t'):formal) =
+          -- check if either side is a child of the other
+          isChildType scope (TypeId t) (TypeId t') ||
+          isChildType scope (TypeId t') (TypeId t)
+          && matchParameters actual formal
+        matchParameters (a:actual) (f:formal) =
+          -- check primative types
+          f == a
+          && matchParameters actual formal
+
+isChildType :: Scope -> Type -> Type -> Bool
+isChildType _ (TypeId _) (TypeId (Id "")) = False
+isChildType scope (TypeId (Id t)) (TypeId (Id t')) =
+  t == t' || t == parent || isChildType scope (TypeId (Id t)) (TypeId (Id parent))
+  where (st, _, _, _) = scope
+        cls  = findKnownSymbol st t'
+        (ClassDecl _ parent _ _ _) = decl cls
+isChildType _ _ _ = False
 
 checkTypeE :: Scope -> Expression -> Type -> Error Type
 checkTypeE scope expr expectedT = do
