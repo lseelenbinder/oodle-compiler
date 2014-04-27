@@ -58,8 +58,8 @@ codeGenerator st debug start = buildString $ lines $ buildString [
         (ClassDecl tk _ _ _ _) = decl (st !! 4)
         filename = (getFilePath (getPosition tk))
         scope = (st, (head st), (head st), debug)
-        reader = deE $ findSymbol st ("Reader", tk)
-        writer = deE $ findSymbol st ("Writer", tk)
+        reader = findKnownSymbol st "Reader"
+        writer = findKnownSymbol st "Writer"
 
 getEntryPoint :: SymbolTable -> Symbol
 getEntryPoint st =
@@ -247,7 +247,7 @@ instance Walkable String where
           push "%eax"
           ]
         where (st, _, _, _) = scope
-              (Ok cls) = findSymbol st (cls', tk)
+              cls = findKnownSymbol st cls'
       ExpressionNull _                -> push "$0"
 
       -- Strings
@@ -505,10 +505,10 @@ vft_label = (++) "VFT"
 buildVFT :: Scope -> Symbol -> [(String, String)]
 buildVFT _ (Symbol name (ClassDecl _ "" _ methods _)) =
   map (\m -> (name, symbol m)) (methods)
-buildVFT scope (Symbol name (ClassDecl tk parentName _ methods _)) =
+buildVFT scope (Symbol name (ClassDecl _ parentName _ methods _)) =
   nub (overwritten ++ new)
   where (st, _, _, _) = scope
-        parent = deE $ findSymbol st (parentName, tk)
+        parent = findKnownSymbol st parentName
         parentVTF = buildVFT scope parent
 
         overwritten = map (\(c, f) -> case findSymbol methods (f, fakeToken) of
