@@ -12,10 +12,7 @@ printToken (Token t (TokenPosition file line col)) =
 
 -- Token is a wrapper for a literal Token and its Position
 data Token = Token { getToken :: TokenType, getPosition :: TokenPosition }
-  deriving (Eq)
-
-instance Show Token where
-  show _ = ""
+  deriving (Eq, Show)
 
 -- TokenType stores the various types of tokens and any data associated with them.
 data TokenType
@@ -74,7 +71,7 @@ instance Show TokenType where
   show (tk) =
     case tk of
       TokenIntLiteral i -> show i
-      TokenNewline -> "\n"
+      TokenNewline -> "newline"
       TokenStringLiteral str -> str
       TokenIdentifier str -> str
       TokenBoolean      -> "boolean"

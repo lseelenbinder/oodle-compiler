@@ -39,7 +39,7 @@ data Statement
   deriving (Show, Eq)
 
 data Id
-      = Id { getIdString :: String}
+      = Id { getIdString :: String }
       | IdArray String [Expression]
   deriving (Show, Eq)
 

@@ -249,7 +249,7 @@ cr            : newline    { }
 {
 
 failWithToken t err =
-  fail $ (concatMap (\s -> s ++ ":") . init $ (splitOn ":" (printToken t))) ++ " " ++ err
+  fail $ (concatMap (\s -> s ++ ":") . init $ (splitOn ":" (printToken t)))++ " " ++ err
 
 parseError tokenStream = fail $ "Parse error at: " ++(
   if (length tokenStream) > 0
