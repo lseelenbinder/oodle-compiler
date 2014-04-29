@@ -169,9 +169,6 @@ main = do
         when verbose $
           hPrint stderr symbolTable'
 
-        when ((length symbolTable' - 4) > length inputFiles - 1) $
-          hPutStrLn stderr "Warning: more than one class per file"
-
         -- Unsupported Features
         let unsupportedFeatures' = unsupportedFeatures symbolTable' parseTree'
         let warningCount = length unsupportedFeatures'
