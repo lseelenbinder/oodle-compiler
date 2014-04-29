@@ -109,6 +109,7 @@ void nullpointertest(int lineno, void* ptr) {
 // ---------------------------------------------------------------------
 void typechecker(int lineno, const void* destVFT, void* newObj) {
   char msg[] = "Runtime error: mismatched types on line ";
+  if (newObj == NULL) { return; } // allow null to be assigned
   int newObjVFT = *((int*) newObj);
 
   if ((int) destVFT == newObjVFT) {
