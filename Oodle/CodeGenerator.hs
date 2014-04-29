@@ -256,9 +256,12 @@ instance Walkable String where
           label ++ ":",
           ".string \"" ++ string ++ "\"",
           ".text",
+          push "$" ++ vft_label "CharNode",
           push "$" ++ label,
           "\tcall string_fromlit", -- string_fromlit is in stdlib.c
-          "\taddl $4, %esp",
+          "\taddl $8, %esp",
+          -- save pointer to the StringVFT
+          "\tmovl $" ++ vft_label "String" ++ ", (%eax)",
           push "%eax"
         ]
         where label = buildLabelTag scope tk

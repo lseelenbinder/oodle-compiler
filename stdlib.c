@@ -32,12 +32,13 @@ int Reader_io_read(void *in) {
 // ----------------------------------------------------------------------
 
 // Constructs and returns an Oodle String using chars in <lit>, which must be null terminated
-struct String *string_fromlit(char *lit)
+struct String *string_fromlit(char *lit, void* VFTCharNode)
 {
   struct String *newstr = (struct String *)calloc(sizeof(struct String), 1);
   struct CharNode *cur = NULL;
   while (*lit) {
     struct CharNode *node = (struct CharNode *)calloc(sizeof(struct CharNode), 1);
+    node->reserved1 = (int) VFTCharNode;
     node->ch = *lit;
     if (cur == NULL) {
       newstr->list = node;
